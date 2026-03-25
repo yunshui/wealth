@@ -23,3 +23,19 @@ def test_config_model_paths():
     assert 'short_term' in Config.SHORT_MODEL_FILE
     assert 'medium_term' in Config.MEDIUM_MODEL_FILE
     assert 'long_term' in Config.LONG_MODEL_FILE
+
+
+from utils.logger import Logger
+
+
+def test_logger_get_instance():
+    """Test logger returns a singleton instance"""
+    logger1 = Logger.get_logger()
+    logger2 = Logger.get_logger()
+    assert logger1 is logger2
+
+
+def test_logger_has_handlers():
+    """Test logger has file and console handlers"""
+    logger = Logger.get_logger()
+    assert len(logger.handlers) >= 2

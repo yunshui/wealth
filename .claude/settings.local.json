@@ -4,7 +4,15 @@
       "Bash(git add CLAUDE.md PROGRESS.md docs/)",
       "Bash(git commit -m \"$\\(cat <<'EOF'\nAdd project design documentation\n\n- Add comprehensive design specs \\(PRD, APP_FLOW, TECH_STACK, FRONTEND_GUIDELINES, BACKEND_STRUCTURE, IMPLEMENTATION_PLAN\\)\n- Add design document in specs directory\n- Add CLAUDE.md for future development guidance\n- Add PROGRESS.md for tracking progress and lessons learned\n\nCo-Authored-By: Claude Opus 4.6 <noreply@anthropic.com>\nEOF\n\\)\")",
       "Bash(git add docs/superpowers/plans/2026-03-25-stage1-initialization.md && git commit -m \"docs: fix Stage 1 plan based on code review feedback\n\n- Add Task 6: Custom exception classes \\(WealthException, DataFetchException, etc.\\)\n- Add Task 7: CacheManager class with file-based caching\n- Fix Task 3: Update file structure to include exceptions.py and cache.py\n- Fix Task 10: Add proper imports to all placeholder modules\n- Fix Task 10: Add complete method signatures matching spec\n- Fix Task 9: Add missing idx_sectors_type index\n- Fix Task 1: Add tests directory creation\n- Update task numbering \\(now 12 tasks instead of 10\\)\n\nCo-Authored-By: Claude Opus 4.6 <noreply@anthropic.com>\")",
-      "Bash(git add .)"
+      "Bash(git add .)",
+      "Bash(git commit -m \"$\\(cat <<'EOF'\nfeat: create project directory structure\n\nCreate initial directory structure for stock prediction system with all necessary Python packages and subdirectories.\n\nCo-Authored-By: Claude Opus 4.6 <noreply@anthropic.com>\nEOF\n\\)\")",
+      "Bash(git show c76600e --no-stat)",
+      "Bash(git ls-tree --name-only -r c76600e)",
+      "Bash(git diff-tree --name-status c76600e^..c76600e)",
+      "Bash(git ls-tree c76600e | grep -E \"^040000\")",
+      "Bash(python -m pytest tests/test_config.py -v)",
+      "Bash(python3 -m pytest tests/test_config.py -v)",
+      "Bash(pip3 install pytest)"
     ]
   }
 }
