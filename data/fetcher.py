@@ -26,12 +26,13 @@ class DataFetcher:
         self.cache = CacheManager() if use_cache else None
         Logger.info("DataFetcher initialized")
 
-    def _retry_api_call(self, api_func, *args, cache_key: str = None, **kwargs) -> pd.DataFrame:
+    def _retry_api_call(self, api_func, *args, cache_key: str = None, expire: int = None, **kwargs) -> pd.DataFrame:
         """Execute API call with retry logic.
 
         Args:
             api_func: akshare API function
             cache_key: Optional cache key
+            expire: Cache expiration time in seconds. If None, uses default
             args: Positional arguments for API
             kwargs: Keyword arguments for API
 
@@ -43,7 +44,7 @@ class DataFetcher:
         """
         # Try cache first
         if self.use_cache and cache_key:
-            cached = self.cache.get(cache_key)
+            cached = self.cache.get(cache_key, expire=expire)
             if cached is not None:
                 Logger.debug(f"Cache hit for {cache_key}")
                 return cached
