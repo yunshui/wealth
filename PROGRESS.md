@@ -41,7 +41,12 @@
 4. 阶段1 编码进行中
    - ✅ Task 1: 创建项目目录结构 (commit: c76600e)
    - ✅ Task 2: 创建 requirements.txt (commit: 98405f5)
-   - ⏳ Task 3-7: 基础工具类（待执行）
+   - ✅ Task 3: Config类 (commit: 2bfe733)
+   - ✅ Task 4: Logger类 (commit: 7720db1)
+   - ✅ Task 5: Helper函数 (commit: 0fc9ae8)
+   - ✅ Task 6: 异常类 (commit: ef05f30)
+   - ✅ Task 7: 缓存管理器 (commit: 2c0176c)
+   - ⏳ Task 8-12: 数据模型、数据库、占位符模块、Streamlit应用、验证（待执行）
 
 2. 需求确认
    - 用途：个人投资辅助工具
