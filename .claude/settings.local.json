@@ -13,7 +13,24 @@
       "Bash(python -m pytest tests/test_config.py -v)",
       "Bash(python3 -m pytest tests/test_config.py -v)",
       "Bash(pip3 install pytest)",
-      "Bash(git commit -m \"$\\(cat <<'EOF'\nwip: update Stage 1 implementation progress\n\n- Update PROGRESS.md with current implementation status\n- Task 1-2 completed \\(directory structure, requirements.txt\\)\n- Tasks 3-7 in progress \\(Config, Logger, Helpers, Exceptions, Cache\\)\n\nCo-Authored-By: Claude Opus 4.6 <noreply@anthropic.com>\nEOF\n\\)\")"
+      "Bash(git commit -m \"$\\(cat <<'EOF'\nwip: update Stage 1 implementation progress\n\n- Update PROGRESS.md with current implementation status\n- Task 1-2 completed \\(directory structure, requirements.txt\\)\n- Tasks 3-7 in progress \\(Config, Logger, Helpers, Exceptions, Cache\\)\n\nCo-Authored-By: Claude Opus 4.6 <noreply@anthropic.com>\nEOF\n\\)\")",
+      "Bash(pytest tests/test_config.py::test_logger_get_instance tests/test_config.py::test_logger_has_handlers -v)",
+      "Bash(PYTHONPATH=/Users/yunshuiyang/Workspace/wealth pytest tests/test_config.py::test_logger_get_instance tests/test_config.py::test_logger_has_handlers -v)",
+      "Bash(PYTHONPATH=/Users/yunshuiyang/Workspace/wealth pytest tests/test_config.py -v)",
+      "Bash(git add utils/logger.py tests/test_config.py)",
+      "Bash(git commit -m \"$\\(cat <<'EOF'\nfeat: add Logger class with file and console handlers\n\n- Singleton pattern using _logger and _setup_complete class variables\n- get_logger\\(\\) classmethod returning the singleton instance\n- _setup_logger\\(\\) classmethod that configures file and console handlers\n- info\\(\\), warning\\(\\), error\\(\\), debug\\(\\), exception\\(\\) class methods\n- Uses Config.LOG_LEVEL, Config.LOG_DIR, Config.LOG_FILE\n- Creates logs directory if not exists\n- File handler with UTF-8 encoding\n- Console handler with same formatting\n\nCo-Authored-By: Claude Opus 4.6 <noreply@anthropic.com>\nEOF\n\\)\")",
+      "Bash(python -m pytest tests/test_helpers.py -v)",
+      "Bash(python3 -m pytest tests/test_helpers.py -v)",
+      "Bash(python -m pytest tests/test_exceptions.py -v)",
+      "Bash(python3 -m pytest tests/test_exceptions.py -v)",
+      "Bash(git add utils/exceptions.py tests/test_exceptions.py)",
+      "Bash(git commit -m \"$\\(cat <<'EOF'\nfeat: add custom exception classes\n\nCo-Authored-By: Claude Opus 4.6 <noreply@anthropic.com>\nEOF\n\\)\")",
+      "Bash(python -m pytest tests/test_cache.py -v)",
+      "Bash(python3 -m pytest tests/test_cache.py -v)",
+      "Bash(git add utils/cache.py tests/test_cache.py)",
+      "Bash(git commit -m \"$\\(cat <<'EOF'\nfeat: add cache manager with file-based caching and expiration\n\n- Add CacheManager class with file-based caching using pickle serialization\n- Support time-based expiration with configurable CACHE_EXPIRE\n- MD5 hashing of cache keys for secure filenames\n- Handle corrupted cache files by automatic removal\n- Add cached_get function with lru_cache decorator for in-memory caching\n- Add comprehensive test suite with 12 test cases\n\nCo-Authored-By: Claude Opus 4.6 <noreply@anthropic.com>\nEOF\n\\)\")",
+      "Bash(pytest tests/ -v --tb=short)",
+      "Bash(PYTHONPATH=/Users/yunshuiyang/Workspace/wealth pytest tests/ -v --tb=short)"
     ]
   }
 }
