@@ -3,10 +3,14 @@
 import time
 import akshare as ak
 import pandas as pd
-from typing import Dict, List, Optional
+from typing import Dict, Callable, Union
 from utils.logger import Logger
 from utils.exceptions import DataFetchException
 from utils.cache import CacheManager
+
+
+# Cache expiration constants
+LATEST_DATA_CACHE_EXPIRE = 60  # Cache latest data for 60 seconds
 
 
 class DataFetcher:
@@ -26,7 +30,14 @@ class DataFetcher:
         self.cache = CacheManager() if use_cache else None
         Logger.info("DataFetcher initialized")
 
-    def _retry_api_call(self, api_func, *args, cache_key: str = None, expire: int = None, **kwargs) -> pd.DataFrame:
+    def _retry_api_call(
+        self,
+        api_func: Callable,
+        *args,
+        cache_key: str = None,
+        expire: int = None,
+        **kwargs
+    ) -> Union[pd.DataFrame, Dict]:
         """Execute API call with retry logic.
 
         Args:
@@ -37,7 +48,7 @@ class DataFetcher:
             kwargs: Keyword arguments for API
 
         Returns:
-            DataFrame with API response
+            DataFrame or Dict with API response
 
         Raises:
             DataFetchException: If all retries fail
@@ -209,7 +220,7 @@ class DataFetcher:
             df = self._retry_api_call(
                 ak.stock_zh_a_spot_em,
                 cache_key="all_stocks_latest",
-                expire=60  # Cache for 60 seconds only
+                expire=LATEST_DATA_CACHE_EXPIRE
             )
 
             # Find the stock

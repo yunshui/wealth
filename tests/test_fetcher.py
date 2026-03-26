@@ -1,4 +1,5 @@
 import pytest
+import time
 from unittest.mock import patch, MagicMock
 import pandas as pd
 from data.fetcher import DataFetcher
@@ -260,3 +261,11 @@ def test_cache_integration(mock_api):
     mock_api.reset_mock()
     result2 = fetcher.get_industry_sectors()
     assert not result2.empty
+
+
+def test_cache_expire_constant():
+    """Test that the LATEST_DATA_CACHE_EXPIRE constant is properly defined"""
+    from data.fetcher import LATEST_DATA_CACHE_EXPIRE
+
+    assert LATEST_DATA_CACHE_EXPIRE == 60
+    assert isinstance(LATEST_DATA_CACHE_EXPIRE, int)
