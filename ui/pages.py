@@ -4,7 +4,6 @@ import streamlit as st
 import pandas as pd
 from datetime import datetime
 
-from utils.logger import Logger
 from data.storage import StockStorage
 from data.database import DatabaseManager
 from ui.layout import color_for_change, format_change, render_card, footer
