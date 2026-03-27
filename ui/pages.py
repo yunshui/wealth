@@ -10,17 +10,36 @@ from ui.layout import color_for_change, format_change, render_card, footer
 from ui.charts import plot_kline_chart, plot_volume_chart, plot_indicator_chart
 
 
+def _get_stock_name(storage: StockStorage, symbol: str) -> str:
+    """Helper function to safely get stock name.
+
+    Args:
+        storage: StockStorage instance
+        symbol: Stock symbol
+
+    Returns:
+        Stock name or 'Unknown' if not found
+    """
+    stock_data = storage.get_stock(symbol)
+    return stock_data.get('name', 'Unknown') if stock_data else 'Unknown'
+
+
 def show_homepage():
     """Display homepage with sector overview."""
     st.header("🏠 首页/板块总览")
 
     # Load data
+    db_manager = None
     try:
-        storage = StockStorage(DatabaseManager())
+        db_manager = DatabaseManager()
+        storage = StockStorage(db_manager)
     except Exception as e:
         st.error(f"数据库连接失败: {e}")
         st.info("请先在'数据更新'页面初始化数据库")
         return
+    finally:
+        if db_manager:
+            db_manager.close()
 
     # Sector selection
     sectors = storage.get_all_sectors()
@@ -71,12 +90,7 @@ def _render_leaders_table(leaders, storage: StockStorage):
     df = pd.DataFrame(leaders)
 
     # Fetch stock names for display
-    df['name'] = df['symbol'].apply(
-        lambda s: storage.get_stock(s).get('name', 'Unknown') if storage.get_stock(s) else 'Unknown'
-    )
-
-    # Add formatted columns if needed
-    df = df.copy()
+    df['name'] = df['symbol'].apply(lambda s: _get_stock_name(storage, s))
 
     # Format score column
     if 'score' in df.columns:
