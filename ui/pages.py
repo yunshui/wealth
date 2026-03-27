@@ -28,57 +28,52 @@ def show_homepage():
     """Display homepage with sector overview."""
     st.header("🏠 首页/板块总览")
 
-    # Load data
-    db_manager = None
+    # Load data - keep connection open for entire function
+    db_manager = DatabaseManager()
+    storage = StockStorage(db_manager)
+
     try:
-        db_manager = DatabaseManager()
-        storage = StockStorage(db_manager)
-    except Exception as e:
-        st.error(f"数据库连接失败: {e}")
-        st.info("请先在'数据更新'页面初始化数据库")
-        return
-    finally:
-        if db_manager:
-            db_manager.close()
+        # Sector selection
+        sectors = storage.get_all_sectors()
+        if not sectors:
+            st.warning("暂无板块数据，请先在'数据更新'页面更新板块数据")
+            return
 
-    # Sector selection
-    sectors = storage.get_all_sectors()
-    if not sectors:
-        st.warning("暂无板块数据，请先在'数据更新'页面更新板块数据")
-        return
+        sector_names = [s['sector_name'] for s in sectors]
+        selected_sector = st.selectbox("选择板块", sector_names, key="sector_select")
 
-    sector_names = [s['sector_name'] for s in sectors]
-    selected_sector = st.selectbox("选择板块", sector_names, key="sector_select")
+        # Get selected sector
+        sector = next((s for s in sectors if s['sector_name'] == selected_sector), None)
+        if not sector:
+            return
 
-    # Get selected sector
-    sector = next((s for s in sectors if s['sector_name'] == selected_sector), None)
-    if not sector:
-        return
+        # Update button
+        col1, col2 = st.columns([4, 1])
+        with col2:
+            if st.button("🔄 更新数据", use_container_width=True, key="update_home"):
+                st.info("数据更新功能将在后续完善")
 
-    # Update button
-    col1, col2 = st.columns([4, 1])
-    with col2:
-        if st.button("🔄 更新数据", use_container_width=True, key="update_home"):
-            st.info("数据更新功能将在后续完善")
+        # Sector leaders
+        leaders = storage.get_sector_leaders(sector['sector_id'])
 
-    # Sector leaders
-    leaders = storage.get_sector_leaders(sector['sector_id'])
+        if leaders:
+            render_card(
+                f"{sector['sector_name']} - 龙头股列表",
+                lambda: _render_leaders_table(leaders, storage),
+                "🏆"
+            )
+        else:
+            st.info("该板块暂无龙头股数据")
 
-    if leaders:
+        # Sector trend chart placeholder
         render_card(
-            f"{sector['sector_name']} - 龙头股列表",
-            lambda: _render_leaders_table(leaders, storage),
-            "🏆"
+            f"{sector['sector_name']} - 板块趋势",
+            _render_sector_trend_placeholder,
+            "📈"
         )
-    else:
-        st.info("该板块暂无龙头股数据")
-
-    # Sector trend chart placeholder
-    render_card(
-        f"{sector['sector_name']} - 板块趋势",
-        _render_sector_trend_placeholder,
-        "📈"
-    )
+    finally:
+        # Close database connection at the very end
+        db_manager.close()
 
 
 def _render_leaders_table(leaders, storage: StockStorage):
