@@ -10,13 +10,51 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 **目标**: 基于7年A股历史数据，对板块龙头股进行短中长期预测，为个人投资者提供买卖建议
 
-**当前阶段**: 文档设计阶段完成，准备开始编码实现
+**当前阶段**: Stage 4 基础UI实现进行中 (4/6任务完成)
+
+---
+
+## 重要工作流程规则
+
+### README.md 更新规则 ⚠️ **必须遵守**
+
+**每次项目有变更时，同时更新 README.md 文件！**
+
+**触发条件**：
+- 任何阶段完成时
+- 重大功能实现后
+- 版本号变化时
+- 架构结构调整后
+- 里程碑达成时
+
+**更新内容**：
+- 当前进度 (Stage状态和任务完成情况)
+- 功能特性变化
+- 项目架构调整
+- 版本号更新
+- Commits记录
+
+**检查清单**：
+- [ ] 项目架构是否有变化
+- [ ] 当前进度是否需要更新
+- [ ] 功能列表是否有增减
+- [ ] 版本号是否需要调整
 
 ---
 
 ## Repository Status
 
-This is a new repository. The project structure and design documents have been created.
+**已完成的阶段**：
+- ✅ Stage 1: 项目初始化
+- ✅ Stage 2: 数据层实现
+- ✅ Stage 3: 预测层实现
+
+**进行中的阶段**：
+- 🔄 Stage 4: 基础UI实现 (4/6任务完成)
+
+**未开始的阶段**：
+- ⏳ Stage 5: 详情页实现
+- ⏳ Stage 6: 集成测试和优化
 
 ---
 
