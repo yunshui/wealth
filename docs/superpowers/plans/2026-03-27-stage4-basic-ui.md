@@ -174,10 +174,28 @@ git commit -m "feat: implement layout components"
 **Files:**
 - Create: `ui/pages.py`
 
-- [ ] **Step 1: Create pages.py with homepage function**
+- [ ] **Step 1: Create pages.py with homepage function and imports**
 
 Create `ui/pages.py` with:
 - `show_homepage()` - Main homepage with sector overview
+- `show_stock_detail()` - Stock detail page
+- `show_data_update()` - Data update interface
+
+Add necessary imports at the top of the file:
+
+```python
+"""UI page components for the application."""
+
+import streamlit as st
+import pandas as pd
+from datetime import datetime
+
+from utils.logger import Logger
+from data.storage import StockStorage
+from data.database import DatabaseManager
+from ui.layout import color_for_change, format_change, render_card, footer
+from ui.charts import plot_kline_chart, plot_volume_chart, plot_indicator_chart
+```
 
 - [ ] **Step 2: Implement homepage structure**
 
@@ -225,7 +243,7 @@ def show_homepage():
     if leaders:
         render_card(
             f"{sector['sector_name']} - 龙头股列表",
-            lambda: _render_leaders_table(leaders),
+            lambda: _render_leaders_table(leaders, storage),
             "🏆"
         )
     else:
@@ -242,15 +260,18 @@ def show_homepage():
 - [ ] **Step 3: Implement leaders table with navigation**
 
 ```python
-def _render_leaders_table(leaders):
+def _render_leaders_table(leaders, storage: StockStorage):
     """Render sector leaders table with click navigation."""
     if not leaders:
         return st.info("暂无数据")
 
     # Convert to DataFrame for display
-    import pandas as pd
-
     df = pd.DataFrame(leaders)
+
+    # Fetch stock names for display
+    df['name'] = df['symbol'].apply(
+        lambda s: storage.get_stock(s).get('name', 'Unknown') if storage.get_stock(s) else 'Unknown'
+    )
 
     # Add formatted columns if needed
     df = df.copy()
@@ -259,10 +280,20 @@ def _render_leaders_table(leaders):
     if 'score' in df.columns:
         df['score'] = df['score'].apply(lambda x: f"{x:.2f}")
 
+    # Reorder columns for display
+    display_cols = ['symbol', 'name', 'score', 'rank']
+    if 'market_cap_rank' in df.columns:
+        display_cols.append('market_cap_rank')
+    if 'volume_rank' in df.columns:
+        display_cols.append('volume_rank')
+
+    df_display = df[display_cols]
+
     st.dataframe(
-        df,
+        df_display,
         use_container_width=True,
         hide_index=True,
+        key="leaders_table",
         column_config={
             'symbol': st.column_config.TextColumn('代码'),
             'name': st.column_config.TextColumn('名称'),
@@ -276,16 +307,15 @@ def _render_leaders_table(leaders):
     )
 
     # Handle row selection for navigation
-    if st.session_state.get('dataframe/_render_leaders_table/selection/rows'):
-        selected_rows = st.session_state['dataframe/_render_leaders_table/selection/rows']
-        if selected_rows:
-            selected_idx = selected_rows[0]
-            if selected_idx < len(leaders):
-                selected_symbol = leaders[selected_idx].get('symbol')
-                if selected_symbol:
-                    st.session_state.selected_symbol = selected_symbol
-                    st.session_state.page = "股票详情"
-                    st.rerun()
+    selection = st.session_state.get('leaders_table', {}).get('selection', {}).get('rows', [])
+    if selection:
+        selected_idx = selection[0]
+        if selected_idx < len(leaders):
+            selected_symbol = leaders[selected_idx].get('symbol')
+            if selected_symbol:
+                st.session_state.selected_symbol = selected_symbol
+                st.session_state.page = "股票详情"
+                st.rerun()
 ```
 
 - [ ] **Step 4: Implement sector trend placeholder**
@@ -341,12 +371,18 @@ def plot_kline_chart(df: pd.DataFrame, height: int = 400):
         st.info("暂无数据")
         return
 
+    # Set date as index for plotting
+    df_plot = df.copy()
+    if 'date' in df_plot.columns:
+        df_plot['date'] = pd.to_datetime(df_plot['date'])
+        df_plot = df_plot.set_index('date')
+
     fig = go.Figure(data=[go.Candlestick(
-        x=df.index,
-        open=df['open'],
-        high=df['high'],
-        low=df['low'],
-        close=df['close'],
+        x=df_plot.index,
+        open=df_plot['open'],
+        high=df_plot['high'],
+        low=df_plot['low'],
+        close=df_plot['close'],
         increasing_line_color='#ef4444',  # Red for up
         decreasing_line_color='#22c55e',  # Green for down
     )])
@@ -373,11 +409,17 @@ def plot_volume_chart(df: pd.DataFrame, height: int = 150):
     if df.empty:
         return
 
-    colors = ['#ef4444' if row['close'] >= row['open'] else '#22c55e' for _, row in df.iterrows()]
+    # Set date as index for plotting
+    df_plot = df.copy()
+    if 'date' in df_plot.columns:
+        df_plot['date'] = pd.to_datetime(df_plot['date'])
+        df_plot = df_plot.set_index('date')
+
+    colors = ['#ef4444' if row['close'] >= row['open'] else '#22c55e' for _, row in df_plot.iterrows()]
 
     fig = go.Figure(data=[go.Bar(
-        x=df.index,
-        y=df['volume'],
+        x=df_plot.index,
+        y=df_plot['volume'],
         marker_color=colors
     )])
 
@@ -405,6 +447,12 @@ def plot_indicator_chart(df: pd.DataFrame, indicator: str, height: int = 200):
         st.info("暂无数据")
         return
 
+    # Set date as index for plotting
+    df_plot = df.copy()
+    if 'date' in df_plot.columns:
+        df_plot['date'] = pd.to_datetime(df_plot['date'])
+        df_plot = df_plot.set_index('date')
+
     # Map indicator column names
     if indicator == 'MACD':
         y_cols = ['macd', 'macd_signal', 'macd_hist']
@@ -426,10 +474,10 @@ def plot_indicator_chart(df: pd.DataFrame, indicator: str, height: int = 200):
     fig = go.Figure()
 
     for i, col in enumerate(y_cols):
-        if col in df.columns:
+        if col in df_plot.columns:
             fig.add_trace(go.Scatter(
-                x=df.index,
-                y=df[col],
+                x=df_plot.index,
+                y=df_plot[col],
                 mode='lines',
                 name=col,
                 line=dict(color=colors[i])
@@ -683,24 +731,7 @@ git commit -m "feat: enhance stock detail page with charts"
 **Files:**
 - Modify: `ui/pages.py`
 
-- [ ] **Step 1: Add update_progress function**
-
-```python
-def update_progress(step: int, total: int, message: str, placeholder):
-    """Update progress bar and status.
-
-    Args:
-        step: Current step number
-        total: Total steps
-        message: Current step description
-        placeholder: Streamlit empty placeholder for updates
-    """
-    progress = step / total
-    placeholder.progress(progress)
-    placeholder.write(f"{message} ({step}/{total})")
-```
-
-- [ ] **Step 2: Update show_data_update function with full update flow**
+- [ ] **Step 1: Update show_data_update function with full update flow**
 
 ```python
 def show_data_update():
