@@ -57,9 +57,9 @@
 
 ---
 
-### 2026-03-27 - Stage 4 基础UI实现进行中
+### 2026-03-27 - Stage 4 基础UI实现完成 ✅
 
-**已完成 (4/6 tasks)**:
+**已完成 (6/6 tasks)**:
 1. Layout Components (ui/layout.py)
    - `footer()`, `render_card()`, `color_for_change()`, `format_change()`
    - commit: 9cb304a
@@ -82,19 +82,22 @@
    - ✅ Spec compliant, code quality approved
    - 代码行数从120行减少到51行
 
-**进行中 (1/6 tasks)**:
 5. Stock Detail Page (ui/pages.py)
    - `show_stock_detail()`, `_render_stock_info_card()`, `_filter_by_time_range()`, `_render_prediction_placeholder()`
-   - commit: dbddb65
-   - ✅ Spec compliant
-   - ❌ Code quality review发现重要问题需要修复：
-     * 数据库连接未关闭（资源泄漏）
-     * 价格变化计算错误（用当日开盘价代替前日收盘价）
-     * 不完整的类型提示
+   - commit: dbddb65, e76e3a1
+   - ✅ Spec compliant, code quality approved
+   - 修复：数据库连接泄漏、价格变化计算错误、类型提示
 
-**未开始 (1/6 tasks)**:
 6. Data Update Interface (ui/pages.py)
    - `show_data_update()`, `_update_sectors_data()`, `_update_indicators_data()`
+   - commit: e76e3a1
+   - ✅ Spec compliant
+
+**测试验证**:
+- ✅ 所有任务完成
+- ✅ 代码质量审查通过
+- ✅ 数据库连接管理正确
+- ✅ 价格计算使用前日收盘价
 
 **Commits**:
 - 9cb304a: feat: implement layout components
@@ -332,13 +335,13 @@
 - [x] 模型训练
 - [x] 18个单元测试全部通过
 
-### 阶段4：基础UI实现（预计2天）🔄 进行中
+### 阶段4：基础UI实现（预计2天） ✅ 已完成
 - [x] 布局组件 (commit: 9cb304a)
 - [x] 图表组件 (commit: a84c9f2)
 - [x] 首页（板块总览）(commit: 9526178)
 - [x] 主应用入口 (commit: d7651e6)
-- [ ] 股票详情页 - 需要修复代码质量问题
-- [ ] 数据更新界面
+- [x] 股票详情页 (commit: e76e3a1)
+- [x] 数据更新界面 (commit: e76e3a1)
 
 ### 阶段5：详情页实现（预计2天）
 - [ ] 预测展示
