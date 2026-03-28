@@ -153,7 +153,7 @@ wealth/
 - ✅ Stage 2: 数据层实现
 - ✅ Stage 3: 预测层实现
 - ✅ Stage 4: 基础UI实现
-- ⏳ Stage 5: 详情页实现
+- 🔄 Stage 5: 详情页实现 (计划已完成，待执行)
 - ⏳ Stage 6: 集成测试和优化
 
 详见 [PROGRESS.md](PROGRESS.md)

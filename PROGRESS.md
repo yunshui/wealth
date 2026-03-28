@@ -72,7 +72,7 @@
 
 3. Homepage (ui/pages.py)
    - `show_homepage()`, `_render_leaders_table()`, `_render_sector_trend_placeholder()`
-   - commit: 9526178
+   - commits: a010e75, 018c226, f3a1cd5, 9526178
    - ✅ Spec compliant, code quality approved
    - 修复：数据库连接管理、AttributeError风险、不必要的copy
 
@@ -84,7 +84,7 @@
 
 5. Stock Detail Page (ui/pages.py)
    - `show_stock_detail()`, `_render_stock_info_card()`, `_filter_by_time_range()`, `_render_prediction_placeholder()`
-   - commit: dbddb65, e76e3a1
+   - commits: dbddb65, e76e3a1
    - ✅ Spec compliant, code quality approved
    - 修复：数据库连接泄漏、价格变化计算错误、类型提示
 
@@ -97,6 +97,41 @@
 - ✅ 所有任务完成
 - ✅ 代码质量审查通过
 - ✅ 数据库连接管理正确
+- ✅ 价格计算使用前日收盘价
+
+**Commits**:
+- 9cb304a: feat: implement layout components
+- a84c9f2: feat: implement chart components with Plotly
+- a010e75: feat: implement homepage with sector overview
+- 018c226: fix: remove unused Logger import
+- f3a1cd5: fix: resolve important issues in homepage implementation
+- 9526178: fix: correct database connection management in homepage
+- d7651e6: refactor: update app.py to use modular UI components
+- dbddb65: feat: enhance stock detail page with charts
+- e76e3a1: fix: fix code quality issues in stock detail page and implement data update interface
+- 2e15fd5: docs: add README.md with project overview
+- e90d140: docs: add README update rule to CLAUDE.md
+- 5001bab: docs: update PROGRESS.md and README.md with Stage 4 completion
+
+**当前状态**: Stage 1 完成，Stage 2 完成，Stage 3 完成，Stage 4 完成，Stage 5 实现计划已完成
+
+**下一步**: 执行 Stage 5 实现计划
+
+---
+
+### 2026-03-28 - Stage 5 实现计划已完成
+
+**实现计划**:
+- 文件: `docs/superpowers/plans/2026-03-28-stage5-detail-prediction.md`
+- 5个任务:
+  1. 创建预测显示组件 (ui/prediction.py)
+  2. 集成预测到股票详情页 (ui/pages.py)
+  3. 添加历史回顾页面
+  4. 界面优化
+  5. 更新文档
+
+**Commits**:
+- 8ecbeb0: docs: create Stage 5 implementation plan
 - ✅ 价格计算使用前日收盘价
 
 **Commits**:
