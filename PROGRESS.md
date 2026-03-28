@@ -113,9 +113,54 @@
 - e90d140: docs: add README update rule to CLAUDE.md
 - 5001bab: docs: update PROGRESS.md and README.md with Stage 4 completion
 
-**当前状态**: Stage 1 完成，Stage 2 完成，Stage 3 完成，Stage 4 完成，Stage 5 实现计划已完成
+**当前状态**: Stage 1 完成，Stage 2 完成，Stage 3 完成，Stage 4 完成，Stage 5 完成
 
-**下一步**: 执行 Stage 5 实现计划
+**下一步**: 执行 Stage 6 实现计划
+
+---
+
+### 2026-03-28 - Stage 5 详情页实现完成 ✅
+
+**已完成 (5/5 tasks)**:
+1. Prediction Display Components (ui/prediction.py)
+   - `_display_action()`, `_confidence_bar()`, `render_horizon_card()`, `render_ensemble_card()`
+   - commit: e057331
+   - ✅ Spec compliant, code quality approved
+
+2. Integrate Prediction into Stock Detail Page (ui/pages.py)
+   - Added `_get_prediction_cached()` with Streamlit caching
+   - Integrated EnsemblePredictor for real-time predictions
+   - Added error handling for missing model files
+   - commit: e057331
+   - ✅ Spec compliant
+
+3. History Review Page (ui/pages.py)
+   - `show_history()` placeholder function
+   - commit: 60cae56
+   - ✅ Spec compliant
+
+4. Interface Optimization (ui/charts.py, ui/prediction.py)
+   - Data sampling for performance (>1000 rows)
+   - Optional type hint added
+   - commit: be61fb8
+   - ✅ Spec compliant
+
+5. Update Documentation (PROGRESS.md, README.md)
+   - Updated PROGRESS.md with Stage 5 completion
+   - Updated README.md with Stage 5 features
+   - Updated current status
+
+**Commits**:
+- e057331: feat: implement prediction display and integrate into stock detail page
+- 60cae56: feat: add history review page to navigation
+- be61fb8: refactor: optimize prediction and chart rendering
+- f79bbc8: docs: update progress with Stage 5 plan ready
+- 8ecbeb0: docs: create Stage 5 implementation plan
+
+**测试验证**:
+- ✅ 所有任务完成
+- ✅ 代码质量审查通过
+- ✅ 预测功能集成完成
 
 ---
 
@@ -378,10 +423,12 @@
 - [x] 股票详情页 (commit: e76e3a1)
 - [x] 数据更新界面 (commit: e76e3a1)
 
-### 阶段5：详情页实现（预计2天）
-- [ ] 预测展示
-- [ ] 历史预测回顾
-- [ ] 界面优化
+### 阶段5：详情页实现（预计2天） ✅ 已完成
+- [x] 预测展示 (ui/prediction.py, commit: e057331)
+- [x] 集成预测到股票详情页 (ui/pages.py, commit: e057331)
+- [x] 历史预测回顾页面 (ui/pages.py, commit: 60cae56)
+- [x] 界面优化 - 缓存和数据采样 (ui/charts.py, ui/prediction.py, commit: be61fb8)
+- [x] 文档更新 (PROGRESS.md, README.md)
 
 ### 阶段6：集成测试和优化（预计2天）
 - [ ] 集成测试
