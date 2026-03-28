@@ -76,8 +76,13 @@ def show_homepage():
         db_manager.close()
 
 
-def _render_leaders_table(leaders, storage: StockStorage):
-    """Render sector leaders table with click navigation."""
+def _render_leaders_table(leaders: list, storage: StockStorage):
+    """Render sector leaders table with click navigation.
+
+    Args:
+        leaders: List of leader stock dictionaries
+        storage: StockStorage instance for data retrieval
+    """
     if not leaders:
         return st.info("暂无数据")
 
@@ -160,68 +165,92 @@ def show_stock_detail():
         return
 
     # Load data
+    db_manager = None
     try:
-        storage = StockStorage(DatabaseManager())
+        db_manager = DatabaseManager()
+        storage = StockStorage(db_manager)
     except Exception as e:
         st.error(f"数据库连接失败: {e}")
         return
 
-    # Get stock info
-    stock = storage.get_stock(symbol)
-    if not stock:
-        st.warning(f"未找到股票: {symbol}")
-        return
+    try:
+        # Get stock info
+        stock = storage.get_stock(symbol)
+        if not stock:
+            st.warning(f"未找到股票: {symbol}")
+            return
 
-    # Display stock info card
-    _render_stock_info_card(stock, storage)
+        # Display stock info card
+        _render_stock_info_card(stock, storage)
 
-    # Get historical data
-    df = storage.get_stock_data(symbol)
-    if df.empty:
-        st.warning("暂无历史数据，请先更新数据")
-        return
+        # Get historical data
+        df = storage.get_stock_data(symbol)
+        if df.empty:
+            st.warning("暂无历史数据，请先更新数据")
+            return
 
-    # Time range selector
-    time_range = st.selectbox(
-        "时间范围",
-        options=["1月", "3月", "6月", "1年", "全部"],
-        key="time_range"
-    )
+        # Time range selector
+        time_range = st.selectbox(
+            "时间范围",
+            options=["1月", "3月", "6月", "1年", "全部"],
+            key="time_range"
+        )
 
-    # Filter data based on time range
-    df_filtered = _filter_by_time_range(df, time_range)
+        # Filter data based on time range
+        df_filtered = _filter_by_time_range(df, time_range)
 
-    # Charts area
-    col1, col2 = st.columns([2, 1])
+        # Charts area
+        col1, col2 = st.columns([2, 1])
 
-    with col1:
-        render_card("价格走势", lambda: plot_kline_chart(df_filtered), "📈")
+        with col1:
+            render_card("价格走势", lambda: plot_kline_chart(df_filtered), "📈")
 
-    with col2:
-        render_card("成交量", lambda: plot_volume_chart(df_filtered), "📊")
+        with col2:
+            render_card("成交量", lambda: plot_volume_chart(df_filtered), "📊")
 
-    # Indicator selector
-    indicator = st.selectbox(
-        "技术指标",
-        options=["MACD", "RSI", "KDJ", "BOLL"],
-        key="indicator_select"
-    )
+        # Indicator selector
+        indicator = st.selectbox(
+            "技术指标",
+            options=["MACD", "RSI", "KDJ", "BOLL"],
+            key="indicator_select"
+        )
 
-    render_card(f"{indicator}指标", lambda: plot_indicator_chart(df_filtered, indicator), "📉")
+        render_card(f"{indicator}指标", lambda: plot_indicator_chart(df_filtered, indicator), "📉")
 
-    # Prediction placeholder
-    _render_prediction_placeholder()
+        # Prediction placeholder
+        _render_prediction_placeholder()
+    finally:
+        # Close database connection
+        if db_manager:
+            db_manager.close()
 
 
 def _render_stock_info_card(stock: dict, storage: StockStorage):
-    """Render stock basic information card."""
-    # Get latest price
+    """Render stock basic information card.
+
+    Args:
+        stock: Stock information dictionary
+        storage: StockStorage instance for data retrieval
+    """
+    # Get latest price and previous close
     latest = storage.get_latest_stock_data(stock['symbol'])
 
     if latest:
         latest_price = latest.get('close', 0)
-        prev_price = latest.get('open', latest_price)
-        change_pct = (latest_price - prev_price) / prev_price * 100 if prev_price > 0 else 0
+
+        # Get previous day's close price for correct change calculation
+        prev_close = latest.get('prev_close', 0)
+        if prev_close == 0:
+            # If prev_close not available, get from historical data
+            df = storage.get_stock_data(stock['symbol'])
+            if len(df) >= 2:
+                # Sort by date and get the second-to-last row's close
+                df_sorted = df.sort_values('date')
+                prev_close = df_sorted.iloc[-2]['close']
+            else:
+                prev_close = latest_price
+
+        change_pct = (latest_price - prev_close) / prev_close * 100 if prev_close > 0 else 0
     else:
         latest_price = 0
         change_pct = 0
@@ -295,6 +324,146 @@ def _render_prediction_placeholder():
 
 
 def show_data_update():
-    """Display data update interface (placeholder)."""
+    """Display data update interface."""
     st.header("🔄 数据更新")
-    st.info("🚀 功能开发中...")
+
+    from analysis.indicators import IndicatorCalculator
+    from analysis.sector import SectorAnalyzer
+    from data.fetcher import DataFetcher
+
+    # Initialize database connection
+    db_manager = None
+    try:
+        db_manager = DatabaseManager()
+        storage = StockStorage(db_manager)
+    except Exception as e:
+        st.error(f"数据库连接失败: {e}")
+        return
+
+    try:
+        # Database status
+        if db_manager.check_database_exists():
+            st.success("✅ 数据库已初始化")
+            last_update = db_manager.get_last_update_date()
+            if last_update:
+                st.info(f"最后更新日期: {last_update}")
+            else:
+                st.info("暂无数据")
+        else:
+            st.warning("⚠️ 数据库未初始化")
+            if st.button("初始化数据库", key="init_db"):
+                try:
+                    db_manager.create_tables()
+                    st.success("数据库初始化成功!")
+                    st.rerun()
+                except Exception as e:
+                    st.error(f"初始化失败: {e}")
+            return
+
+        # Update buttons
+        col1, col2, col3 = st.columns(3)
+
+        with col1:
+            if st.button("🔄 更新板块数据", use_container_width=True, key="update_sectors"):
+                _update_sectors_data(storage)
+
+        with col2:
+            if st.button("🔄 更新股票数据", use_container_width=True, key="update_stocks"):
+                st.info("股票数据更新功能将在后续完善")
+
+        with col3:
+            if st.button("🔄 更新技术指标", use_container_width=True, key="update_indicators"):
+                _update_indicators_data(storage)
+    finally:
+        # Close database connection
+        if db_manager:
+            db_manager.close()
+
+
+def _update_sectors_data(storage: StockStorage):
+    """Update sectors and leaders data.
+
+    Args:
+        storage: StockStorage instance for data operations
+    """
+    from data.fetcher import DataFetcher
+    from analysis.indicators import IndicatorCalculator
+    from analysis.sector import SectorAnalyzer
+
+    update_placeholder = st.empty()
+
+    try:
+        fetcher = DataFetcher()
+        analyzer = SectorAnalyzer(storage)
+
+        # Step 1: Get sectors
+        update_placeholder.info("正在获取板块列表...")
+        industry_sectors = fetcher.get_industry_sectors()
+        concept_sectors = fetcher.get_concept_sectors()
+
+        # Step 2: Save sectors
+        update_placeholder.info("正在保存板块数据...")
+        for _, sector in industry_sectors.iterrows():
+            storage.save_sector({
+                'sector_id': sector['行业'],
+                'sector_name': sector['行业名称'],
+                'sector_type': 'industry'
+            })
+
+        for _, sector in concept_sectors.iterrows():
+            storage.save_sector({
+                'sector_id': sector['概念'],
+                'sector_name': sector['概念名称'],
+                'sector_type': 'concept'
+            })
+
+        # Step 3: Update sector leaders
+        update_placeholder.info("正在更新板块龙头股...")
+        analyzer.update_all_sector_leaders()
+
+        st.success("✅ 板块数据更新完成!")
+
+    except Exception as e:
+        st.error(f"更新失败: {str(e)}")
+
+
+def _update_indicators_data(storage: StockStorage):
+    """Update technical indicators for all stocks.
+
+    Args:
+        storage: StockStorage instance for data operations
+    """
+    from analysis.indicators import IndicatorCalculator
+
+    update_placeholder = st.empty()
+
+    try:
+        # Get all stocks
+        update_placeholder.info("正在获取股票列表...")
+        stocks = storage.get_stock_list()
+
+        if not stocks:
+            st.warning("暂无股票数据，请先更新板块和股票数据")
+            return
+
+        calculator = IndicatorCalculator()
+        total = len(stocks)
+
+        for idx, stock in enumerate(stocks, 1):
+            update_placeholder.info(f"正在计算指标: {stock['name']} ({idx}/{total})")
+
+            # Get historical data
+            df = storage.get_stock_data(stock['symbol'])
+
+            if not df.empty:
+                # Calculate indicators
+                df_with_indicators = calculator.calculate_all(df)
+
+                # Save updated data
+                for _, row in df_with_indicators.iterrows():
+                    storage.save_stock_data(row.to_dict())
+
+        st.success(f"✅ 技术指标更新完成! 共处理 {total} 只股票")
+
+    except Exception as e:
+        st.error(f"更新失败: {str(e)}")
