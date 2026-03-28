@@ -12,6 +12,22 @@ from ui.prediction import render_horizon_card, render_ensemble_card
 from prediction.ensemble import EnsemblePredictor
 
 
+@st.cache_data(ttl=3600)
+def _get_prediction_cached(symbol: str) -> Dict:
+    """Cached prediction getter (creates storage inside).
+
+    Args:
+        symbol: Stock symbol
+
+    Returns:
+        Prediction dictionary
+    """
+    storage = StockStorage(DatabaseManager())
+    predictor = EnsemblePredictor(storage)
+    predictor.load_models()
+    return predictor.predict(symbol)
+
+
 def _get_stock_name(storage: StockStorage, symbol: str) -> str:
     """Helper function to safely get stock name.
 
@@ -222,12 +238,10 @@ def show_stock_detail():
         # Prediction section
         st.markdown("---")
 
-        # Get prediction
+        # Get prediction (using cached function)
         try:
             with st.spinner("正在分析预测..."):
-                predictor = EnsemblePredictor(storage)
-                predictor.load_models()
-                prediction = predictor.predict(symbol)
+                prediction = _get_prediction_cached(symbol)
 
             # Display horizon predictions in columns
             col1, col2, col3 = st.columns(3)

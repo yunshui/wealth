@@ -18,6 +18,10 @@ def plot_kline_chart(df: pd.DataFrame, height: int = 400):
         st.info("暂无数据")
         return
 
+    # Sample data for performance if too large
+    if len(df) > 1000:
+        df = df.sample(n=1000).sort_index()
+
     # Set date as index for plotting
     df_plot = df.copy()
     if 'date' in df_plot.columns:
@@ -53,6 +57,10 @@ def plot_volume_chart(df: pd.DataFrame, height: int = 150):
     if df.empty:
         return
 
+    # Sample data for performance if too large
+    if len(df) > 1000:
+        df = df.sample(n=1000).sort_index()
+
     # Set date as index for plotting
     df_plot = df.copy()
     if 'date' in df_plot.columns:
@@ -87,6 +95,10 @@ def plot_indicator_chart(df: pd.DataFrame, indicator: str, height: int = 200):
     if df.empty:
         st.info("暂无数据")
         return
+
+    # Sample data for performance if too large
+    if len(df) > 1000:
+        df = df.sample(n=1000).sort_index()
 
     # Set date as index for plotting
     df_plot = df.copy()
