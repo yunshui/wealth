@@ -8,6 +8,8 @@ from data.storage import StockStorage
 from data.database import DatabaseManager
 from ui.layout import color_for_change, format_change, render_card, footer
 from ui.charts import plot_kline_chart, plot_volume_chart, plot_indicator_chart
+from ui.prediction import render_horizon_card, render_ensemble_card
+from prediction.ensemble import EnsemblePredictor
 
 
 def _get_stock_name(storage: StockStorage, symbol: str) -> str:
@@ -217,8 +219,36 @@ def show_stock_detail():
 
         render_card(f"{indicator}指标", lambda: plot_indicator_chart(df_filtered, indicator), "📉")
 
-        # Prediction placeholder
-        _render_prediction_placeholder()
+        # Prediction section
+        st.markdown("---")
+
+        # Get prediction
+        try:
+            with st.spinner("正在分析预测..."):
+                predictor = EnsemblePredictor(storage)
+                predictor.load_models()
+                prediction = predictor.predict(symbol)
+
+            # Display horizon predictions in columns
+            col1, col2, col3 = st.columns(3)
+
+            with col1:
+                render_horizon_card("短期预测", prediction['short'], icon="📈")
+
+            with col2:
+                render_horizon_card("中期预测", prediction['medium'], icon="📊")
+
+            with col3:
+                render_horizon_card("长期预测", prediction['long'], icon="📉")
+
+            # Display ensemble
+            render_ensemble_card(prediction)
+
+        except FileNotFoundError:
+            st.warning("⚠️ 模型文件未找到")
+            st.info("请先训练模型: python prediction/trainer.py")
+        except Exception as e:
+            st.error(f"预测获取失败: {e}")
     finally:
         # Close database connection
         if db_manager:
