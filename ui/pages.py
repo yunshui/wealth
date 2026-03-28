@@ -497,3 +497,15 @@ def _update_indicators_data(storage: StockStorage):
 
     except Exception as e:
         st.error(f"更新失败: {str(e)}")
+
+
+def show_history():
+    """Display history review page."""
+    st.header("📜 历史预测回顾")
+    st.info("🚀 历史回顾功能将在后续实现")
+    st.write("""
+    本页面将展示:
+    - 预测准确率统计
+    - 准确率趋势图
+    - 历史预测记录
+    """)

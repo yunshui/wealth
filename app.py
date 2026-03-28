@@ -3,7 +3,7 @@
 import streamlit as st
 from utils.logger import Logger
 from data.database import DatabaseManager
-from ui.pages import show_homepage, show_stock_detail, show_data_update
+from ui.pages import show_homepage, show_stock_detail, show_data_update, show_history
 from ui.layout import footer
 
 # Page configuration
@@ -29,8 +29,8 @@ with st.sidebar:
     # Page navigation
     page = st.radio(
         "导航",
-        ["首页/板块总览", "股票详情", "数据更新"],
-        index=["首页/板块总览", "股票详情", "数据更新"].index(st.session_state.page)
+        ["首页/板块总览", "股票详情", "数据更新", "历史回顾"],
+        index=["首页/板块总览", "股票详情", "数据更新", "历史回顾"].index(st.session_state.page)
     )
     st.session_state.page = page
 
@@ -46,6 +46,9 @@ elif st.session_state.page == "股票详情":
 
 elif st.session_state.page == "数据更新":
     show_data_update()
+
+elif st.session_state.page == "历史回顾":
+    show_history()
 
 # Footer
 footer()
