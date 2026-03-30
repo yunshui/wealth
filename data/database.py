@@ -45,11 +45,14 @@ class DatabaseManager:
         if not os.path.exists(self.db_path):
             return False
 
-        conn = self.get_connection()
-        cursor = conn.cursor()
-        cursor.execute("SELECT count(*) FROM sqlite_master WHERE type='table'")
-        count = cursor.fetchone()[0]
-        return count > 0
+        try:
+            conn = self.get_connection()
+            cursor = conn.cursor()
+            cursor.execute("SELECT count(*) FROM sqlite_master WHERE type='table'")
+            count = cursor.fetchone()[0]
+            return count > 0
+        except Exception:
+            return False
 
     def create_tables(self) -> None:
         """Create all required database tables."""

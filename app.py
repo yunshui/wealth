@@ -14,12 +14,18 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
+# Initialize database
+db_manager = DatabaseManager()
+if not db_manager.check_database_exists():
+    db_manager.create_tables()
+    Logger.info("Database initialized successfully")
+
 # Initialize session state
 if "page" not in st.session_state:
     st.session_state.page = "首页/板块总览"
 
 if "db_initialized" not in st.session_state:
-    st.session_state.db_initialized = False
+    st.session_state.db_initialized = True
 
 # Sidebar
 with st.sidebar:
