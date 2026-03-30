@@ -151,21 +151,57 @@ class DatabaseManager:
             )
         ''')
 
-        # Create indexes
-        cursor.execute('CREATE INDEX IF NOT EXISTS idx_sectors_type ON sectors(sector_type)')
-        cursor.execute('CREATE INDEX IF NOT EXISTS idx_stocks_industry ON stocks(industry)')
-        cursor.execute('CREATE INDEX IF NOT EXISTS idx_stocks_sector ON stocks(sector)')
-        cursor.execute('CREATE INDEX IF NOT EXISTS idx_stock_data_date ON stock_data(date)')
-        cursor.execute('CREATE INDEX IF NOT EXISTS idx_stock_data_symbol ON stock_data(symbol)')
-        cursor.execute('CREATE INDEX IF NOT EXISTS idx_stock_data_date_symbol ON stock_data(date, symbol)')
-        cursor.execute('CREATE INDEX IF NOT EXISTS idx_predictions_date ON predictions(date)')
-        cursor.execute('CREATE INDEX IF NOT EXISTS idx_predictions_symbol ON predictions(symbol)')
-        cursor.execute('CREATE INDEX IF NOT EXISTS idx_predictions_date_symbol_horizon ON predictions(date, symbol, horizon)')
-        cursor.execute('CREATE INDEX IF NOT EXISTS idx_sector_leaders_sector ON sector_leaders(sector_id)')
-        cursor.execute('CREATE INDEX IF NOT EXISTS idx_model_params_name ON model_params(model_name)')
+        # Create indexes for performance
+        self._create_indexes(cursor)
 
         conn.commit()
         Logger.info("Database tables created successfully")
+
+    def _create_indexes(self, cursor) -> None:
+        """Create indexes for query performance optimization."""
+        # Index on stock_data for fast symbol and date queries
+        cursor.execute('''
+            CREATE INDEX IF NOT EXISTS idx_stock_data_symbol_date
+            ON stock_data(symbol, date)
+        ''')
+
+        # Index on stock_data for fast latest data queries
+        cursor.execute('''
+            CREATE INDEX IF NOT EXISTS idx_stock_data_date
+            ON stock_data(date DESC)
+        ''')
+
+        # Index on stocks for fast sector queries
+        cursor.execute('''
+            CREATE INDEX IF NOT EXISTS idx_stocks_sector
+            ON stocks(sector)
+        ''')
+
+        # Index on stocks for fast industry queries
+        cursor.execute('''
+            CREATE INDEX IF NOT EXISTS idx_stocks_industry
+            ON stocks(industry)
+        ''')
+
+        # Index on predictions for fast lookups
+        cursor.execute('''
+            CREATE INDEX IF NOT EXISTS idx_predictions_symbol_date
+            ON predictions(symbol, date)
+        ''')
+
+        # Index on sector_leaders for fast sector queries
+        cursor.execute('''
+            CREATE INDEX IF NOT EXISTS idx_sector_leaders_sector_id
+            ON sector_leaders(sector_id)
+        ''')
+
+        # Additional indexes
+        cursor.execute('CREATE INDEX IF NOT EXISTS idx_sectors_type ON sectors(sector_type)')
+        cursor.execute('CREATE INDEX IF NOT EXISTS idx_stock_data_symbol ON stock_data(symbol)')
+        cursor.execute('CREATE INDEX IF NOT EXISTS idx_predictions_date ON predictions(date)')
+        cursor.execute('CREATE INDEX IF NOT EXISTS idx_predictions_symbol ON predictions(symbol)')
+        cursor.execute('CREATE INDEX IF NOT EXISTS idx_predictions_date_symbol_horizon ON predictions(date, symbol, horizon)')
+        cursor.execute('CREATE INDEX IF NOT EXISTS idx_model_params_name ON model_params(model_name)')
 
     def get_last_update_date(self) -> Optional[str]:
         """Get the last update date from stock_data.

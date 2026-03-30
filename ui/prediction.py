@@ -1,7 +1,7 @@
 """Prediction display components for the application."""
 
 import streamlit as st
-from typing import Dict, Tuple
+from typing import Dict, Tuple, Optional
 
 
 def _display_action(action: str, confidence: float) -> Tuple[str, str]:

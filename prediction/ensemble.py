@@ -90,31 +90,78 @@ class EnsemblePredictor:
         Returns:
             Prediction dictionary with all horizons and ensemble
         """
-        # Get stock data from storage
-        df = self.storage.get_stock_data(symbol)
+        try:
+            # Get stock data from storage
+            df = self.storage.get_stock_data(symbol)
 
-        if df.empty:
-            Logger.warning(f"No data available for {symbol}")
-            return self._empty_prediction(symbol)
+            if df.empty:
+                Logger.warning(f"No data available for {symbol}")
+                return self._empty_prediction(symbol)
 
-        # Calculate indicators
-        from analysis.indicators import IndicatorCalculator
-        df = IndicatorCalculator.calculate_all(df)
+            if len(df) < 60:
+                Logger.warning(f"Insufficient data for {symbol}: {len(df)} records")
+                return self._insufficient_data_prediction(symbol, len(df))
 
-        # Extract features for each horizon
-        X_short = FeatureEngineer.extract_short_term_features(df, lookback=20)
-        X_medium = FeatureEngineer.extract_medium_term_features(df, lookback=120)
-        X_long = FeatureEngineer.extract_long_term_features(df)
+            # Calculate indicators
+            from analysis.indicators import IndicatorCalculator
+            df = IndicatorCalculator.calculate_all(df)
 
-        # Reshape if needed (single sample)
-        if X_short.ndim == 1:
-            X_short = X_short.reshape(1, -1)
-        if X_medium.ndim == 1:
-            X_medium = X_medium.reshape(1, -1)
-        if X_long.ndim == 1:
-            X_long = X_long.reshape(1, -1)
+            # Extract features for each horizon
+            X_short = FeatureEngineer.extract_short_term_features(df, lookback=20)
+            X_medium = FeatureEngineer.extract_medium_term_features(df, lookback=120)
+            X_long = FeatureEngineer.extract_long_term_features(df)
 
-        return self._make_prediction(X_short, X_medium, X_long, symbol)
+            # Reshape if needed (single sample)
+            if X_short.ndim == 1:
+                X_short = X_short.reshape(1, -1)
+            if X_medium.ndim == 1:
+                X_medium = X_medium.reshape(1, -1)
+            if X_long.ndim == 1:
+                X_long = X_long.reshape(1, -1)
+
+            return self._make_prediction(X_short, X_medium, X_long, symbol)
+
+        except Exception as e:
+            Logger.error(f"Prediction failed for {symbol}: {str(e)}")
+            return self._error_prediction(symbol, str(e))
+
+    def _insufficient_data_prediction(self, symbol: str, data_count: int) -> Dict:
+        """Return prediction when data is insufficient.
+
+        Args:
+            symbol: Stock symbol
+            data_count: Number of available records
+
+        Returns:
+            Prediction dictionary with warning
+        """
+        return {
+            'symbol': symbol,
+            'date': datetime.now().strftime('%Y-%m-%d'),
+            'short': {'action': 'hold', 'confidence': 0.0, 'reasoning': [f'数据不足（{data_count}条，需要至少60条）']},
+            'medium': {'action': 'hold', 'confidence': 0.0, 'reasoning': [f'数据不足（{data_count}条，需要至少120条）']},
+            'long': {'action': 'hold', 'confidence': 0.0, 'reasoning': [f'数据不足（{data_count}条，需要更多历史数据）']},
+            'ensemble': {'action': 'hold', 'confidence': 0.0, 'breakdown': {}, 'reasoning': [f'数据不足（{data_count}条）']}
+        }
+
+    def _error_prediction(self, symbol: str, error_msg: str) -> Dict:
+        """Return prediction when an error occurs.
+
+        Args:
+            symbol: Stock symbol
+            error_msg: Error message
+
+        Returns:
+            Prediction dictionary with error
+        """
+        return {
+            'symbol': symbol,
+            'date': datetime.now().strftime('%Y-%m-%d'),
+            'short': {'action': 'hold', 'confidence': 0.0, 'reasoning': [f'预测失败: {error_msg}']},
+            'medium': {'action': 'hold', 'confidence': 0.0, 'reasoning': [f'预测失败: {error_msg}']},
+            'long': {'action': 'hold', 'confidence': 0.0, 'reasoning': [f'预测失败: {error_msg}']},
+            'ensemble': {'action': 'hold', 'confidence': 0.0, 'breakdown': {}, 'reasoning': [f'预测失败: {error_msg}']}
+        }
 
     def _empty_prediction(self, symbol: str) -> Dict:
         """Return empty prediction when no data available.

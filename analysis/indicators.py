@@ -20,11 +20,11 @@ class IndicatorCalculator:
         Returns:
             DataFrame with added MA columns
         """
-        result = df.copy()
+        # Avoid unnecessary copy - modify in place if possible
         for period in periods:
             col_name = f'ma{period}'
-            result[col_name] = df['close'].rolling(window=period).mean()
-        return result
+            df[col_name] = df['close'].rolling(window=period).mean()
+        return df
 
     @staticmethod
     def calculate_macd(df: pd.DataFrame, fast: int = 12, slow: int = 26, signal: int = 9) -> pd.DataFrame:
@@ -41,12 +41,11 @@ class IndicatorCalculator:
         """
         try:
             import pandas_ta as ta
-            result = df.copy()
             macd = ta.macd(df['close'], fast=fast, slow=slow, signal=signal)
-            result['macd'] = macd[f'MACD_{fast}_{slow}_{signal}']
-            result['macd_signal'] = macd[f'MACDs_{fast}_{slow}_{signal}']
-            result['macd_hist'] = macd[f'MACDh_{fast}_{slow}_{signal}']
-            return result
+            df['macd'] = macd[f'MACD_{fast}_{slow}_{signal}']
+            df['macd_signal'] = macd[f'MACDs_{fast}_{slow}_{signal}']
+            df['macd_hist'] = macd[f'MACDh_{fast}_{slow}_{signal}']
+            return df
         except ImportError:
             Logger.warning("pandas-ta not available, using manual MACD calculation")
             return IndicatorCalculator._calculate_macd_manual(df, fast, slow, signal)
@@ -54,17 +53,15 @@ class IndicatorCalculator:
     @staticmethod
     def _calculate_macd_manual(df: pd.DataFrame, fast: int = 12, slow: int = 26, signal: int = 9) -> pd.DataFrame:
         """Manual MACD calculation when pandas-ta is not available."""
-        result = df.copy()
-
-        # Calculate EMAs
+        # Calculate EMAs in-place for efficiency
         ema_fast = df['close'].ewm(span=fast, adjust=False).mean()
         ema_slow = df['close'].ewm(span=slow, adjust=False).mean()
 
-        result['macd'] = ema_fast - ema_slow
-        result['macd_signal'] = result['macd'].ewm(span=signal, adjust=False).mean()
-        result['macd_hist'] = result['macd'] - result['macd_signal']
+        df['macd'] = ema_fast - ema_slow
+        df['macd_signal'] = df['macd'].ewm(span=signal, adjust=False).mean()
+        df['macd_hist'] = df['macd'] - df['macd_signal']
 
-        return result
+        return df
 
     @staticmethod
     def calculate_kdj(df: pd.DataFrame, k: int = 9, d: int = 3, j: int = 3) -> pd.DataFrame:
@@ -79,20 +76,18 @@ class IndicatorCalculator:
         Returns:
             DataFrame with KDJ indicators
         """
-        result = df.copy()
-
         # Calculate RSV (Raw Stochastic Value)
         low_min = df['low'].rolling(window=k).min()
         high_max = df['high'].rolling(window=k).max()
         rsv = (df['close'] - low_min) / (high_max - low_min) * 100
         rsv = rsv.fillna(50)  # Handle NaN
 
-        # Calculate K, D, J values
-        result['kdj_k'] = rsv.ewm(com=2, adjust=False).mean()
-        result['kdj_d'] = result['kdj_k'].ewm(com=2, adjust=False).mean()
-        result['kdj_j'] = 3 * result['kdj_k'] - 2 * result['kdj_d']
+        # Calculate K, D, J values in-place
+        df['kdj_k'] = rsv.ewm(com=2, adjust=False).mean()
+        df['kdj_d'] = df['kdj_k'].ewm(com=2, adjust=False).mean()
+        df['kdj_j'] = 3 * df['kdj_k'] - 2 * df['kdj_d']
 
-        return result
+        return df
 
     @staticmethod
     def calculate_rsi(df: pd.DataFrame, periods: List[int] = [6, 12, 24]) -> pd.DataFrame:
@@ -107,11 +102,10 @@ class IndicatorCalculator:
         """
         try:
             import pandas_ta as ta
-            result = df.copy()
             for period in periods:
                 col_name = f'rsi{period}'
-                result[col_name] = ta.rsi(df['close'], length=period)
-            return result
+                df[col_name] = ta.rsi(df['close'], length=period)
+            return df
         except ImportError:
             Logger.warning("pandas-ta not available, using manual RSI calculation")
             return IndicatorCalculator._calculate_rsi_manual(df, periods)
@@ -119,18 +113,16 @@ class IndicatorCalculator:
     @staticmethod
     def _calculate_rsi_manual(df: pd.DataFrame, periods: List[int] = [6, 12, 24]) -> pd.DataFrame:
         """Manual RSI calculation when pandas-ta is not available."""
-        result = df.copy()
+        delta = df['close'].diff()
+        gain = (delta.where(delta > 0, 0)).rolling(window=12).mean()  # Use max period for efficiency
+        loss = (-delta.where(delta < 0, 0)).rolling(window=12).mean()
 
         for period in periods:
-            delta = df['close'].diff()
-            gain = (delta.where(delta > 0, 0)).rolling(window=period).mean()
-            loss = (-delta.where(delta < 0, 0)).rolling(window=period).mean()
-
             rs = gain / loss
             col_name = f'rsi{period}'
-            result[col_name] = 100 - (100 / (1 + rs))
+            df[col_name] = 100 - (100 / (1 + rs))
 
-        return result
+        return df
 
     @staticmethod
     def calculate_boll(df: pd.DataFrame, period: int = 20, std: int = 2) -> pd.DataFrame:
@@ -144,14 +136,12 @@ class IndicatorCalculator:
         Returns:
             DataFrame with upper, middle, and lower bands
         """
-        result = df.copy()
-
-        result['boll_middle'] = df['close'].rolling(window=period).mean()
+        df['boll_middle'] = df['close'].rolling(window=period).mean()
         rolling_std = df['close'].rolling(window=period).std()
-        result['boll_upper'] = result['boll_middle'] + (rolling_std * std)
-        result['boll_lower'] = result['boll_middle'] - (rolling_std * std)
+        df['boll_upper'] = df['boll_middle'] + (rolling_std * std)
+        df['boll_lower'] = df['boll_middle'] - (rolling_std * std)
 
-        return result
+        return df
 
     @staticmethod
     def calculate_obv(df: pd.DataFrame) -> pd.DataFrame:
@@ -163,13 +153,11 @@ class IndicatorCalculator:
         Returns:
             DataFrame with OBV values
         """
-        result = df.copy()
-
-        # Calculate OBV
+        # Calculate OBV in-place for efficiency
         obv = (np.sign(df['close'].diff()) * df['volume']).fillna(0).cumsum()
-        result['obv'] = obv
+        df['obv'] = obv
 
-        return result
+        return df
 
     @staticmethod
     def calculate_all(df: pd.DataFrame) -> pd.DataFrame:
@@ -183,24 +171,17 @@ class IndicatorCalculator:
             DataFrame with all indicators added
         """
         Logger.info("Calculating all technical indicators...")
-        result = df.copy()
 
-        # Calculate moving averages
-        result = IndicatorCalculator.calculate_ma(result, [5, 10, 20, 60])
+        # Calculate all indicators in-place for efficiency
+        IndicatorCalculator.calculate_ma(df, [5, 10, 20, 60])
+        IndicatorCalculator.calculate_macd(df)
+        IndicatorCalculator.calculate_kdj(df)
+        IndicatorCalculator.calculate_rsi(df, [6, 12, 24])
+        IndicatorCalculator.calculate_boll(df)
+        IndicatorCalculator.calculate_obv(df)
 
-        # Calculate MACD
-        result = IndicatorCalculator.calculate_macd(result)
-
-        # Calculate KDJ
-        result = IndicatorCalculator.calculate_kdj(result)
-
-        # Calculate RSI
-        result = IndicatorCalculator.calculate_rsi(result, [6, 12, 24])
-
-        # Calculate Bollinger Bands
-        result = IndicatorCalculator.calculate_boll(result)
-
-        # Calculate OBV
+        Logger.info("Technical indicators calculated successfully")
+        return df
         result = IndicatorCalculator.calculate_obv(result)
 
         Logger.info("Technical indicators calculated successfully")
