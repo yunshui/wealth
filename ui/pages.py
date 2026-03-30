@@ -450,15 +450,15 @@ def _update_sectors_data(storage: StockStorage):
         update_placeholder.info("正在保存板块数据...")
         for _, sector in industry_sectors.iterrows():
             storage.save_sector({
-                'sector_id': sector['行业'],
-                'sector_name': sector['行业名称'],
+                'sector_id': sector['板块代码'],
+                'sector_name': sector['板块名称'],
                 'sector_type': 'industry'
             })
 
         for _, sector in concept_sectors.iterrows():
             storage.save_sector({
-                'sector_id': sector['概念'],
-                'sector_name': sector['概念名称'],
+                'sector_id': sector['板块代码'],
+                'sector_name': sector['板块名称'],
                 'sector_type': 'concept'
             })
 
