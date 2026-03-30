@@ -154,11 +154,20 @@ wealth/
 - ✅ Stage 3: 预测层实现
 - ✅ Stage 4: 基础UI实现
 - ✅ Stage 5: 详情页实现
-- ⏳ Stage 6: 集成测试和优化
+- ✅ Stage 6: 集成测试和优化
 
 详见 [PROGRESS.md](PROGRESS.md)
 
 ## 最新更新
+
+### Stage 6 集成测试和优化 (v1.0.0) ✅
+
+- ✅ 集成测试：15个集成测试用例，覆盖完整流程
+- ✅ 性能优化：数据库索引、指标计算优化、批量操作
+- ✅ 错误处理完善：统一错误处理、用户友好提示
+- ✅ 文档完善：用户手册、开发者指南
+
+**系统已达到V1.0版本！** 🎉
 
 ### Stage 5 详情页实现 (v0.5.0)
 
@@ -208,6 +217,14 @@ wealth/
 - 项目主页：[GitHub](https://github.com/yourusername/wealth)
 - 问题反馈：[Issues](https://github.com/yourusername/wealth/issues)
 
+## 文档
+
+- [用户使用手册](docs/USER_GUIDE.md) - 详细的使用说明
+- [开发者指南](docs/DEVELOPER_GUIDE.md) - 开发和贡献指南
+- [产品需求文档](docs/PRD.md) - 功能需求说明
+- [应用流程文档](docs/APP_FLOW.md) - 数据和操作流程
+- [实现计划](docs/IMPLEMENTATION_PLAN.md) - 详细实现计划
+
 ---
 
-**人机协同A股智能投资决策系统 v0.5.0** | 预测仅供参考，投资风险自担
+**人机协同A股智能投资决策系统 v1.0.0** | 预测仅供参考，投资风险自担
