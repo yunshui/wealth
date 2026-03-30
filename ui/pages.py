@@ -414,7 +414,7 @@ def show_data_update():
 
         with col2:
             if st.button("🔄 更新股票数据", use_container_width=True, key="update_stocks"):
-                st.info("股票数据更新功能将在后续完善")
+                _update_stocks_data(storage)
 
         with col3:
             if st.button("🔄 更新技术指标", use_container_width=True, key="update_indicators"):
@@ -467,6 +467,101 @@ def _update_sectors_data(storage: StockStorage):
         analyzer.update_all_sector_leaders()
 
         st.success("✅ 板块数据更新完成!")
+
+    except Exception as e:
+        st.error(f"更新失败: {str(e)}")
+
+
+def _update_stocks_data(storage: StockStorage):
+    """Update stock data for all sectors.
+
+    Args:
+        storage: StockStorage instance for data operations
+    """
+    from data.fetcher import DataFetcher
+    from analysis.indicators import IndicatorCalculator
+    from datetime import datetime, timedelta
+
+    update_placeholder = st.empty()
+
+    try:
+        fetcher = DataFetcher()
+        calculator = IndicatorCalculator()
+
+        # Get all sectors
+        update_placeholder.info("正在获取板块列表...")
+        sectors = storage.get_all_sectors()
+
+        if not sectors:
+            st.warning("请先更新板块数据")
+            return
+
+        # Calculate date range (last 7 years for initial load)
+        end_date = datetime.now().strftime('%Y%m%d')
+        start_date = (datetime.now() - timedelta(days=7*365)).strftime('%Y%m%d')
+
+        total_sectors = len(sectors)
+        total_stocks = 0
+
+        for idx, sector in enumerate(sectors, 1):
+            sector_name = sector['sector_name']
+            sector_type = sector['sector_type']
+
+            update_placeholder.info(f"正在获取板块 ({idx}/{total_sectors}): {sector_name}")
+
+            try:
+                # Get stocks in this sector
+                stocks_df = fetcher.get_sector_stocks(sector_name, sector_type)
+
+                if stocks_df is None or stocks_df.empty:
+                    continue
+
+                # Process each stock
+                for _, stock_row in stocks_df.iterrows():
+                    symbol = stock_row.get('代码', '')
+                    if not symbol or len(symbol) < 6:
+                        continue
+
+                    # Format symbol
+                    symbol = f"{symbol}.SH" if symbol.startswith('6') else f"{symbol}.SZ"
+
+                    update_placeholder.info(f"正在获取股票数据: {symbol}")
+
+                    # Get stock info
+                    try:
+                        stock_info = fetcher.get_stock_info(symbol)
+                        if stock_info and not stock_info.get('error'):
+                            storage.save_stock({
+                                'symbol': symbol,
+                                'name': stock_info.get('股票简称', ''),
+                                'industry': stock_info.get('所属行业', ''),
+                                'sector': sector_name,
+                                'market_cap': float(stock_info.get('总市值', 0) or 0),
+                                'pe_ratio': float(stock_info.get('市盈率-动态', 0) or 0),
+                                'pb_ratio': float(stock_info.get('市净率', 0) or 0)
+                            })
+                    except Exception:
+                        pass  # Skip if stock info fails
+
+                    # Get historical data
+                    try:
+                        history_df = fetcher.get_stock_history(symbol, start_date, end_date)
+
+                        if history_df is not None and not history_df.empty:
+                            # Calculate indicators
+                            history_df = calculator.calculate_all(history_df)
+
+                            # Save data
+                            storage.save_stock_data(history_df)
+                            total_stocks += 1
+                    except Exception:
+                        pass  # Skip if history fails
+
+            except Exception as e:
+                Logger.warning(f"Failed to process sector {sector_name}: {str(e)}")
+                continue
+
+        st.success(f"✅ 股票数据更新完成! 共处理 {total_stocks} 只股票")
 
     except Exception as e:
         st.error(f"更新失败: {str(e)}")
