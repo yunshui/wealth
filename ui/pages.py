@@ -3,6 +3,7 @@
 import streamlit as st
 import pandas as pd
 from datetime import datetime
+from typing import Dict
 
 from data.storage import StockStorage
 from data.database import DatabaseManager

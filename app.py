@@ -16,7 +16,7 @@ st.set_page_config(
 
 # Initialize session state
 if "page" not in st.session_state:
-    st.session_state.page = "首页"
+    st.session_state.page = "首页/板块总览"
 
 if "db_initialized" not in st.session_state:
     st.session_state.db_initialized = False
