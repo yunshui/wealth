@@ -428,7 +428,7 @@ def show_data_update():
 
 
 def _update_sectors_data(storage: StockStorage):
-    """Update sectors and leaders data from config file.
+    """Update sectors data from akshare API and save to database.
 
     Args:
         storage: StockStorage instance for data operations
@@ -436,8 +436,6 @@ def _update_sectors_data(storage: StockStorage):
     from data.fetcher import DataFetcher
     from analysis.indicators import IndicatorCalculator
     from analysis.sector import SectorAnalyzer
-    import json
-    import os
 
     update_placeholder = st.empty()
 
@@ -445,75 +443,43 @@ def _update_sectors_data(storage: StockStorage):
         fetcher = DataFetcher()
         analyzer = SectorAnalyzer(storage)
 
-        # Load sectors config
-        config_path = os.path.join(os.path.dirname(__file__), '..', 'config', 'sectors.json')
+        # Step 1: Get sectors from API
+        update_placeholder.info("正在获取板块列表...")
+        industry_sectors = fetcher.get_industry_sectors()
+        concept_sectors = fetcher.get_concept_sectors()
 
-        if not os.path.exists(config_path):
-            st.error("配置文件不存在: config/sectors.json")
-            return
-
-        with open(config_path, 'r', encoding='utf-8') as f:
-            config = json.load(f)
-
-        sectors_config = config.get('sectors', [])
-
-        # Step 1: Save sectors from config to database
+        # Step 2: Save all sectors to database
         update_placeholder.info("正在保存板块数据...")
 
         saved_count = 0
-        for sector_config in sectors_config:
-            sector_name = sector_config['name']
-            sector_type = sector_config['type']
-
-            # Generate a unique sector_id based on name and type
-            sector_id = f"{sector_type}_{sector_name}"
-
-            # Save to database
+        for _, sector in industry_sectors.iterrows():
             storage.save_sector({
-                'sector_id': sector_id,
-                'sector_name': sector_name,
-                'sector_type': sector_type
+                'sector_id': sector['板块代码'],
+                'sector_name': sector['板块名称'],
+                'sector_type': 'industry'
             })
-
-            # Store the sector_id back to config
-            sector_config['sector_id'] = sector_id
             saved_count += 1
 
-        # Step 2: Update sector leaders and save to config
+        for _, sector in concept_sectors.iterrows():
+            storage.save_sector({
+                'sector_id': sector['板块代码'],
+                'sector_name': sector['板块名称'],
+                'sector_type': 'concept'
+            })
+            saved_count += 1
+
+        # Step 3: Update sector leaders
         update_placeholder.info("正在更新板块龙头股...")
+        analyzer.update_all_sector_leaders()
 
-        updated_leaders_count = 0
-
-        for sector_config in sectors_config:
-            sector_name = sector_config['name']
-
-            # Get leaders from database directly by name
-            leaders = storage.get_sector_leaders_by_name(sector_name)
-
-            # Update config with leaders
-            sector_config['leaders'] = []
-
-            if leaders:
-                for leader in leaders[:10]:  # Top 10 leaders
-                    sector_config['leaders'].append({
-                        'symbol': leader.get('symbol', ''),
-                        'rank': leader.get('rank', 0),
-                        'score': leader.get('score', 0)
-                    })
-                updated_leaders_count += 1
-
-        # Step 3: Save updated config back to file
-        with open(config_path, 'w', encoding='utf-8') as f:
-            json.dump(config, f, ensure_ascii=False, indent=2)
-
-        st.success(f"✅ 板块数据更新完成! 已更新 {saved_count} 个板块, {updated_leaders_count} 个板块龙头股")
+        st.success(f"✅ 板块数据更新完成! 已保存 {saved_count} 个板块")
 
     except Exception as e:
         st.error(f"更新失败: {str(e)}")
 
 
 def _update_stocks_data(storage: StockStorage):
-    """Update stock data for all sectors using parallel processing from config.
+    """Update stock data for all sectors using parallel processing from database.
 
     Args:
         storage: StockStorage instance for data operations
@@ -521,28 +487,23 @@ def _update_stocks_data(storage: StockStorage):
     from data.fetcher import DataFetcher
     from analysis.indicators import IndicatorCalculator
     from datetime import datetime, timedelta
-    import json
-    import os
 
     update_placeholder = st.empty()
     progress_placeholder = st.empty()
 
     try:
-        # Load config
-        config_path = os.path.join(os.path.dirname(__file__), '..', 'config', 'sectors.json')
+        # Get all sectors from database
+        update_placeholder.info("正在获取板块列表...")
+        sectors_config = storage.get_all_sectors()
 
-        if not os.path.exists(config_path):
-            st.error("配置文件不存在: config/sectors.json")
+        if not sectors_config:
+            st.error("数据库中没有板块数据，请先更新板块数据")
             return
 
-        with open(config_path, 'r', encoding='utf-8') as f:
-            config = json.load(f)
-
-        sectors_config = config.get('sectors', [])
-        update_config = config.get('update_config', {})
-        years_to_keep = update_config.get('years_to_keep', 7)
-        sector_workers = update_config.get('parallel_workers', 8)
-        stock_workers = update_config.get('parallel_workers', 16)  # More workers for stocks
+        # Configuration
+        years_to_keep = 7
+        sector_workers = 8
+        stock_workers = 16  # More workers for stocks
 
         update_placeholder.info(f"正在获取 {len(sectors_config)} 个板块配置...")
 
@@ -617,15 +578,15 @@ def _update_stocks_data(storage: StockStorage):
             """Process a single sector and return (stocks_count, skipped_count).
 
             Args:
-                sector_config: Sector config dictionary
+                sector_config: Sector config dictionary from database
 
             Returns:
                 Tuple of (processed_count, skipped_count)
             """
             nonlocal sectors_processed
 
-            sector_name = sector_config['name']
-            sector_type = sector_config['type']
+            sector_name = sector_config['sector_name']
+            sector_type = sector_config['sector_type']
             processed_count = 0
             skipped_count = 0
 

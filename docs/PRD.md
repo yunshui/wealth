@@ -232,40 +232,17 @@
 - 界面响应：页面切换应在2秒内完成
 - 首次加载：首页加载应在5秒内完成
 
-#### 2.4.5 配置文件管理
-**配置文件路径**：`config/sectors.json`
+#### 2.4.5 数据库驱动架构
 
-**配置结构**：
-```json
-{
-  "sectors": [
-    {
-      "sector_id": "industry_白酒",
-      "name": "白酒",
-      "type": "industry",
-      "leaders": [
-        {
-          "symbol": "600519.SH",
-          "rank": 1,
-          "score": 0.95
-        }
-      ]
-    }
-  ],
-  "update_config": {
-    "years_to_keep": 7,
-    "min_data_points": 100,
-    "parallel_workers": 8
-  }
-}
-```
+**数据存储**：
+- 板块列表：存储在 SQLite 数据库的 `sectors` 表
+- 龙头股信息：存储在 SQLite 数据库的 `sector_leaders` 表
+- 更新配置：硬编码在代码中（可后续调整为配置项）
 
-**配置说明**：
-- `sectors`: 板块列表，包含sector_id、name、type、leaders
-- `leaders`: 龙头股信息，每次更新后保存到配置文件
-- `update_config`: 更新配置
-  - `years_to_keep`: 数据保留年限
-  - `parallel_workers`: 并行工作线程数
+**优势**：
+- 单一数据源，无需维护配置文件
+- 数据更新时直接更新数据库
+- 支持动态板块管理
 
 #### 2.4.6 功能菜单
 **菜单项**：（已整合到左侧导航）

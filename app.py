@@ -1,8 +1,6 @@
 """Main Streamlit application."""
 
 import streamlit as st
-import json
-import os
 from utils.logger import Logger
 from data.database import DatabaseManager
 from data.storage import StockStorage
@@ -30,22 +28,14 @@ if "selected_sector" not in st.session_state:
     st.session_state.selected_sector = None
 
 
-def load_key_sectors():
-    """Load key sectors from config file.
+def load_sectors():
+    """Load sectors from database.
 
     Returns:
-        Set of sector names that should be displayed
+        List of sector dictionaries
     """
-    config_path = os.path.join(os.path.dirname(__file__), 'config', 'sectors.json')
-    key_sector_names = set()
-
-    if os.path.exists(config_path):
-        with open(config_path, 'r', encoding='utf-8') as f:
-            config = json.load(f)
-            sectors = config.get('sectors', [])
-            key_sector_names.update(s['name'] for s in sectors)
-
-    return key_sector_names
+    storage = StockStorage(db_manager)
+    return storage.get_all_sectors()
 
 
 # Layer 1: Header
@@ -61,15 +51,9 @@ with content_col:
     if nav_module == "home":
         st.markdown("## 🏠 首页总览")
 
-        # Load key sectors from config
-        key_sector_names = load_key_sectors()
-
-        # Get all sectors from storage and filter
+        # Load sectors from database
         storage = StockStorage(db_manager)
-        all_sectors = storage.get_all_sectors()
-
-        # Filter to only show key sectors
-        sectors = [s for s in all_sectors if s['sector_name'] in key_sector_names]
+        sectors = load_sectors()
 
         def handle_sector_click(sector):
             """Handle sector selection."""

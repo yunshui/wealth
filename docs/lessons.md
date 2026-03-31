@@ -186,12 +186,41 @@ def get_sector_leaders_by_name(self, sector_name: str) -> List[Dict]:
 - 优先使用名称查询而非 ID 查询（更灵活）
 - 添加新功能时同步更新数据层接口
 
-## 18. 配置文件驱动的板块管理
+## 18. 数据库驱动架构 vs 配置文件
 
 ### 问题
-板块信息分散在数据库和配置文件中，导致维护困难。
+项目最初使用 config/sectors.json 作为板块配置，导致数据在数据库和配置文件之间不一致。
 
 ### 解决方案
+完全从数据库读取板块和龙头股数据，废除配置文件：
+```python
+# 从数据库读取所有板块
+sectors_config = storage.get_all_sectors()
+
+# 数据库表结构
+# - sectors: sector_id, sector_name, sector_type, leader_count
+# - sector_leaders: symbol, sector_id, rank, score, market_cap_rank, volume_rank
+```
+
+### 优势
+- 单一数据源，避免不一致
+- 数据更新时直接写入数据库
+- 支持动态板块管理
+- 无需维护配置文件
+
+### 经验教训
+- 对于主要业务数据，使用数据库而非配置文件
+- 配置文件只用于系统级配置（如并行线程数）
+- 单一真实来源（Single Source of Truth）原则
+
+---
+
+## 19. 配置文件驱动的板块管理（已废弃）
+
+### 问题描述
+板块信息分散在数据库和配置文件中，导致维护困难。
+
+### 解决方案（已由数据库驱动替代）
 ```json
 {
   "sectors": [
@@ -215,27 +244,14 @@ def get_sector_leaders_by_name(self, sector_name: str) -> List[Dict]:
 }
 ```
 
-```python
-# 从配置文件读取板块列表
-def load_sectors_from_config():
-    with open('config/sectors.json', 'r', encoding='utf-8') as f:
-        config = json.load(f)
-    return config.get('sectors', [])
-
-# 更新龙头股到配置文件
-def save_leaders_to_config(sector_name, leaders):
-    with open('config/sectors.json', 'r+', encoding='utf-8') as f:
-        config = json.load(f)
-        # 更新 leaders
-        json.dump(config, f, ensure_ascii=False, indent=2)
-```
-
 ### 经验教训
 - 配置文件作为单一真实来源（Single Source of Truth）
 - 板块列表和龙头股信息都保存在配置文件
 - 数据库用于存储详细的历史数据
 - 配置文件便于版本控制和手动编辑
 - 使用 `ensure_ascii=False` 正确处理中文
+
+**注**：此模式已废弃，现改用数据库驱动架构。
 
 ---
 
