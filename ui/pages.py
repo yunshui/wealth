@@ -528,9 +528,6 @@ def _update_stocks_data(storage: StockStorage):
     progress_placeholder = st.empty()
 
     try:
-        fetcher = DataFetcher()
-        calculator = IndicatorCalculator()
-
         # Load config
         config_path = os.path.join(os.path.dirname(__file__), '..', 'config', 'sectors.json')
 
@@ -544,7 +541,8 @@ def _update_stocks_data(storage: StockStorage):
         sectors_config = config.get('sectors', [])
         update_config = config.get('update_config', {})
         years_to_keep = update_config.get('years_to_keep', 7)
-        parallel_workers = update_config.get('parallel_workers', 8)
+        sector_workers = update_config.get('parallel_workers', 8)
+        stock_workers = update_config.get('parallel_workers', 16)  # More workers for stocks
 
         update_placeholder.info(f"正在获取 {len(sectors_config)} 个板块配置...")
 
@@ -555,112 +553,156 @@ def _update_stocks_data(storage: StockStorage):
         # Thread-safe counters
         total_lock = threading.Lock()
         processed_stocks = 0
+        skipped_stocks = 0
         total_sectors = len(sectors_config)
 
         # Progress tracking
         sectors_processed = 0
+        stock_progress = []
 
-        def process_sector(sector_config: Dict) -> int:
-            """Process a single sector and return count of stocks processed.
+        def process_stock(stock_dict: Dict, sector_name: str, start_date: str, end_date: str, thread_id: int) -> tuple:
+            """Process a single stock.
 
             Args:
-                sector_config: Sector config dictionary
+                stock_dict: Stock dictionary with symbol info
+                sector_name: Sector name
+                start_date: Start date for history
+                end_date: End date for history
+                thread_id: Thread identifier
 
             Returns:
-                Number of stocks processed
+                Tuple of (success, symbol)
             """
-            nonlocal sectors_processed
-
             # Use a separate storage instance for each thread
             db = DatabaseManager()
             thread_storage = StockStorage(db)
             thread_fetcher = DataFetcher()
             thread_calculator = IndicatorCalculator()
 
+            symbol = stock_dict.get('symbol', '')
+            if not symbol:
+                return (False, symbol)
+
+            try:
+                # Skip if already has recent data (check last 3 days)
+                try:
+                    latest_data = thread_storage.get_latest_stock_data(symbol)
+                    if latest_data and latest_data.get('date'):
+                        from datetime import datetime as dt
+                        last_date = dt.strptime(latest_data['date'], '%Y-%m-%d')
+                        if (dt.now() - last_date).days < 3:
+                            return (False, symbol)  # Skip, data is recent
+                except Exception:
+                    pass
+
+                # Get historical data (main bottleneck)
+                history_df = thread_fetcher.get_stock_history(symbol, start_date, end_date)
+
+                if history_df is None or history_df.empty:
+                    return (False, symbol)
+
+                # Calculate indicators
+                history_df = thread_calculator.calculate_all(history_df)
+
+                # Save data
+                thread_storage.save_stock_data(history_df)
+                return (True, symbol)
+
+            except Exception as e:
+                return (False, symbol)
+            finally:
+                db.close()
+
+        def process_sector(sector_config: Dict) -> tuple:
+            """Process a single sector and return (stocks_count, skipped_count).
+
+            Args:
+                sector_config: Sector config dictionary
+
+            Returns:
+                Tuple of (processed_count, skipped_count)
+            """
+            nonlocal sectors_processed
+
             sector_name = sector_config['name']
             sector_type = sector_config['type']
-            stocks_processed = 0
+            processed_count = 0
+            skipped_count = 0
 
             try:
                 # Get stocks in this sector
+                thread_fetcher = DataFetcher()
                 stocks_df = thread_fetcher.get_sector_stocks(sector_name, sector_type)
 
                 if stocks_df is None or stocks_df.empty:
-                    return 0
+                    return (0, 0)
 
-                # Process each stock
-                for _, stock_row in stocks_df.iterrows():
-                    symbol = stock_row.get('代码', '')
-                    if not symbol or len(symbol) < 6:
-                        continue
+                # Convert to list of dicts for faster iteration
+                stocks_list = []
+                for _, row in stocks_df.iterrows():
+                    code = row.get('代码', '')
+                    if code and len(code) >= 6:
+                        symbol = f"{code}.SH" if code.startswith('6') else f"{code}.SZ"
+                        stocks_list.append({'symbol': symbol, 'code': code})
 
-                    # Format symbol
-                    symbol = f"{symbol}.SH" if symbol.startswith('6') else f"{symbol}.SZ"
+                # Parallel process stocks within sector
+                with ThreadPoolExecutor(max_workers=stock_workers) as stock_executor:
+                    futures = {
+                        stock_executor.submit(
+                            process_stock,
+                            stock,
+                            sector_name,
+                            start_date,
+                            end_date,
+                            sectors_processed
+                        ): stock
+                        for stock in stocks_list
+                    }
 
-                    # Get stock info
-                    try:
-                        stock_info = thread_fetcher.get_stock_info(symbol)
-                        if stock_info and not stock_info.get('error'):
-                            thread_storage.save_stock({
-                                'symbol': symbol,
-                                'name': stock_info.get('股票简称', ''),
-                                'industry': stock_info.get('所属行业', ''),
-                                'sector': sector_name,
-                                'market_cap': float(stock_info.get('总市值', 0) or 0),
-                                'pe_ratio': float(stock_info.get('市盈率-动态', 0) or 0),
-                                'pb_ratio': float(stock_info.get('市净率', 0) or 0)
-                            })
-                    except Exception:
-                        pass
+                    for future in as_completed(futures):
+                        success, symbol = future.result()
+                        if success:
+                            processed_count += 1
+                        else:
+                            skipped_count += 1
 
-                    # Get historical data
-                    try:
-                        history_df = thread_fetcher.get_stock_history(symbol, start_date, end_date)
+                        # Update progress
+                        with total_lock:
+                            total = processed_stocks + skipped_count + processed_count + skipped_count
+                            # Update local tracking
+                            pass
 
-                        if history_df is not None and not history_df.empty:
-                            # Calculate indicators
-                            history_df = thread_calculator.calculate_all(history_df)
-
-                            # Save data
-                            thread_storage.save_stock_data(history_df)
-                            stocks_processed += 1
-                    except Exception:
-                        pass
+                return (processed_count, skipped_count)
 
             except Exception as e:
-                pass
+                return (0, 0)
 
             finally:
-                # Update progress safely
                 with total_lock:
-                    nonlocal processed_stocks
-                    processed_stocks += stocks_processed
                     nonlocal sectors_processed
                     sectors_processed += 1
 
-            return stocks_processed
-
         # Process sectors in parallel
-        max_workers = min(parallel_workers, total_sectors)
-
-        with ThreadPoolExecutor(max_workers=max_workers) as executor:
-            # Submit all tasks
+        with ThreadPoolExecutor(max_workers=sector_workers) as executor:
+            # Submit all sector tasks
             futures = {executor.submit(process_sector, sector): sector for sector in sectors_config}
 
             # Process completed tasks and update progress
             for future in as_completed(futures):
-                sector = futures[future]
                 try:
-                    count = future.result()
+                    processed, skipped = future.result()
+                    with total_lock:
+                        processed_stocks += processed
+                        skipped_stocks += skipped
                     # Update progress display
                     progress_placeholder.info(
-                        f"进度: {sectors_processed}/{total_sectors} 板块, "
-                        f"已处理 {processed_stocks} 只股票"
+                        f"进度: {sectors_processed}/{total_sectors} 板块 | "
+                        f"已处理: {processed_stocks} 只 | 跳过: {skipped_stocks} 只"
                     )
                 except Exception as e:
                     pass
 
-        st.success(f"✅ 股票数据更新完成! 共处理 {processed_stocks} 只股票")
+        st.success(f"✅ 股票数据更新完成! 已处理 {processed_stocks} 只股票, 跳过 {skipped_stocks} 只")
 
     except Exception as e:
         st.error(f"更新失败: {str(e)}")
