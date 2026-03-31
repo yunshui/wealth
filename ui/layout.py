@@ -5,8 +5,8 @@ import streamlit as st
 def header():
     """Display first layer - main title."""
     st.markdown("""
-        <div style='text-align: center; padding: 20px 0;'>
-            <h1 style='margin: 0; color: #1f77b4;'>📈 人机协同A股智能投资决策系统</h1>
+        <div style='text-align: center; padding: 20px 0; background: linear-gradient(135deg, #C8102E 0%, #E63946 100%); border-radius: 12px; margin: 10px;'>
+            <h1 style='margin: 0; color: white; text-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);'>📈 人机协同A股智能投资决策系统</h1>
         </div>
     """, unsafe_allow_html=True)
 
@@ -25,7 +25,7 @@ def navigation():
     if "nav_module" not in st.session_state:
         st.session_state.nav_module = "home"
 
-    # Add custom CSS for navigation styling - force left alignment
+    # Add custom CSS for navigation styling - 招商证券配色
     st.markdown("""
         <style>
         /* Container-level left alignment */
@@ -43,20 +43,22 @@ def navigation():
             width: 100% !important;
         }
 
-        /* Button styling with left alignment */
+        /* Button styling with left alignment - 招商证券红色 */
         div.stButton > button:first-child {
             border: none !important;
             box-shadow: none !important;
             background-color: transparent !important;
             text-align: left !important;
-            padding: 8px 12px !important;
-            margin: 0 !important;
-            border-radius: 6px !important;
+            padding: 10px 14px !important;
+            margin: 4px 0 !important;
+            border-radius: 8px !important;
             width: auto !important;
             min-width: 100% !important;
             display: inline-flex !important;
             justify-content: flex-start !important;
             align-items: center !important;
+            color: #333 !important;
+            font-weight: 500 !important;
         }
 
         /* Button content left alignment */
@@ -67,9 +69,10 @@ def navigation():
             width: auto !important;
         }
 
-        /* Hover effect */
+        /* Hover effect - 招商证券红色高亮 */
         div.stButton > button:first-child:hover {
-            background-color: #f0f2f6 !important;
+            background-color: rgba(200, 16, 46, 0.1) !important;
+            color: #C8102E !important;
         }
 
         /* Remove any centering from parent elements */
@@ -86,11 +89,11 @@ def navigation():
         for module in nav_modules:
             is_active = st.session_state.nav_module == module["id"]
             if is_active:
-                # Active state - use container to show selected background
+                # Active state - use CMS Securities red color
                 with st.container():
                     st.markdown(f"""
-                        <div style="background-color: #e8f4f8; padding: 8px 12px; border-radius: 6px; margin: 2px 0;">
-                            <strong>{module['icon']} {module['name']}</strong>
+                        <div style="background-color: #C8102E; padding: 10px 14px; border-radius: 8px; margin: 4px 0;">
+                            <strong style="color: white;">{module['icon']} {module['name']}</strong>
                         </div>
                     """, unsafe_allow_html=True)
             else:
@@ -119,11 +122,10 @@ def sector_grid(sectors: list, storage=None, on_sector_click=None):
     industry_sectors = [s for s in sectors if s['sector_type'] == 'industry']
     concept_sectors = [s for s in sectors if s['sector_type'] == 'concept']
 
-    # Custom CSS for sector cards
+    # Custom CSS for sector cards -招商证券配色方案
     st.markdown("""
         <style>
         .sector-card {
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
             padding: 20px;
             border-radius: 12px;
             margin: 10px 0;
@@ -135,20 +137,67 @@ def sector_grid(sectors: list, storage=None, on_sector_click=None):
             box-shadow: 0 6px 20px rgba(0, 0, 0, 0.15);
         }
         .sector-card-industry {
-            background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
+            background: linear-gradient(135deg, #C8102E 0%, #E63946 100%);
         }
         .sector-card-concept {
-            background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);
+            background: linear-gradient(135deg, #FFA500 0%, #FFB84D 100%);
         }
         .sector-name {
             font-size: 18px;
             font-weight: bold;
             color: white;
             margin: 0 0 10px 0;
+            text-shadow: 0 1px 2px rgba(0, 0, 0, 0.2);
         }
         .sector-metrics {
             font-size: 14px;
-            color: rgba(255, 255, 255, 0.9);
+            color: rgba(255, 255, 255, 0.95);
+            text-shadow: 0 1px 1px rgba(0, 0, 0, 0.15);
+        }
+
+        /* Tab styling - 招商证券配色 */
+        .stTabs [data-baseweb="tab-list"] {
+            gap: 24px;
+            background-color: #f8f9fa;
+            padding: 10px;
+            border-radius: 8px;
+        }
+        .stTabs [data-baseweb="tab"] {
+            height: 50px;
+            padding: 0 20px;
+            border-radius: 6px;
+            background-color: transparent;
+            color: #666;
+            font-weight: 600;
+            font-size: 15px;
+            border: 2px solid transparent;
+        }
+        .stTabs [aria-selected="true"] {
+            background-color: #C8102E !important;
+            color: white !important;
+            border-color: #C8102E;
+        }
+        .stTabs [data-baseweb="tab"]:hover {
+            background-color: rgba(200, 16, 46, 0.1);
+            color: #C8102E;
+        }
+        .stTabs [aria-selected="true"]:hover {
+            background-color: #C8102E !important;
+            color: white !important;
+        }
+
+        /* Button styling */
+        .stButton > button {
+            background-color: #C8102E;
+            color: white;
+            border: none;
+            padding: 8px 16px;
+            border-radius: 6px;
+            font-weight: 600;
+            transition: background-color 0.2s;
+        }
+        .stButton > button:hover {
+            background-color: #A50C26;
         }
         </style>
     """, unsafe_allow_html=True)
