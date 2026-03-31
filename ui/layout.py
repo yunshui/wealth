@@ -5,8 +5,8 @@ import streamlit as st
 def header():
     """Display first layer - main title."""
     st.markdown("""
-        <div style='text-align: center; padding: 25px 0; background: linear-gradient(135deg, #4A90E2 0%, #87CEEB 100%); border-radius: 16px; margin: 10px; box-shadow: 0 4px 20px rgba(74, 144, 226, 0.3);'>
-            <h1 style='margin: 0; color: white; text-shadow: 0 2px 4px rgba(0, 0, 0, 0.2); font-size: 28px;'>📈 人机协同A股智能投资决策系统</h1>
+        <div style='text-align: center; padding: 25px 0; background: linear-gradient(135deg, #009A61 0%, #00C853 100%); border-radius: 16px; margin: 10px; box-shadow: 0 4px 20px rgba(0, 154, 97, 0.2);'>
+            <h1 style='margin: 0; color: white; text-shadow: 0 2px 4px rgba(0, 0, 0, 0.15); font-size: 28px;'>📈 人机协同A股智能投资决策系统</h1>
         </div>
     """, unsafe_allow_html=True)
 
@@ -25,7 +25,7 @@ def navigation():
     if "nav_module" not in st.session_state:
         st.session_state.nav_module = "home"
 
-    # Add custom CSS for navigation styling - 天空蓝配色
+    # Add custom CSS for navigation styling - 菜鸟绿配色
     st.markdown("""
         <style>
         /* Container-level left alignment */
@@ -43,7 +43,7 @@ def navigation():
             width: 100% !important;
         }
 
-        /* Button styling with left alignment - 天空蓝 */
+        /* Button styling with left alignment - 菜鸟绿 */
         div.stButton > button:first-child {
             border: none !important;
             box-shadow: none !important;
@@ -51,7 +51,7 @@ def navigation():
             text-align: left !important;
             padding: 12px 16px !important;
             margin: 4px 0 !important;
-            border-radius: 10px !important;
+            border-radius: 8px !important;
             width: auto !important;
             min-width: 100% !important;
             display: inline-flex !important;
@@ -70,10 +70,10 @@ def navigation():
             width: auto !important;
         }
 
-        /* Hover effect - 天空蓝高亮 */
+        /* Hover effect - 菜鸟绿高亮 */
         div.stButton > button:first-child:hover {
-            background-color: rgba(74, 144, 226, 0.12) !important;
-            color: #4A90E2 !important;
+            background-color: rgba(0, 154, 97, 0.08) !important;
+            color: #009A61 !important;
         }
 
         /* Remove any centering from parent elements */
@@ -90,10 +90,10 @@ def navigation():
         for module in nav_modules:
             is_active = st.session_state.nav_module == module["id"]
             if is_active:
-                # Active state - 天空蓝凸显模式
+                # Active state - 菜鸟绿
                 with st.container():
                     st.markdown(f"""
-                        <div style="background: linear-gradient(135deg, #4A90E2 0%, #87CEEB 100%); padding: 12px 16px; border-radius: 10px; margin: 4px 0; box-shadow: 0 4px 12px rgba(74, 144, 226, 0.3);">
+                        <div style="background-color: #009A61; padding: 12px 16px; border-radius: 8px; margin: 4px 0; box-shadow: 0 2px 8px rgba(0, 154, 97, 0.15);">
                             <strong style="color: white; font-size: 15px;">{module['icon']} {module['name']}</strong>
                         </div>
                     """, unsafe_allow_html=True)
@@ -123,110 +123,87 @@ def sector_grid(sectors: list, storage=None, on_sector_click=None):
     industry_sectors = [s for s in sectors if s['sector_type'] == 'industry']
     concept_sectors = [s for s in sectors if s['sector_type'] == 'concept']
 
-    # Custom CSS for sector cards - 天空蓝配色
+    # Custom CSS for sector cards - 菜鸟绿配色
     st.markdown("""
         <style>
         .sector-card {
             padding: 24px;
-            border-radius: 16px;
+            border-radius: 12px;
             margin: 12px 0;
-            box-shadow: 0 8px 24px rgba(74, 144, 226, 0.2);
-            transition: transform 0.3s ease, box-shadow 0.3s ease;
-            position: relative;
-            overflow: hidden;
+            box-shadow: 0 4px 16px rgba(0, 0, 0, 0.08);
+            transition: transform 0.2s, box-shadow 0.2s;
+            border: 2px solid #e8f5e9;
+            background: white;
         }
         .sector-card:hover {
-            transform: translateY(-4px);
-            box-shadow: 0 12px 32px rgba(74, 144, 226, 0.3);
+            transform: translateY(-2px);
+            box-shadow: 0 8px 24px rgba(0, 154, 97, 0.15);
+            border-color: #009A61;
         }
         .sector-card-industry {
-            background: linear-gradient(135deg, #4A90E2 0%, #6BB9F0 100%);
+            border-left: 4px solid #009A61;
         }
         .sector-card-concept {
-            background: linear-gradient(135deg, #87CEEB 0%, #B0E0E6 100%);
-        }
-        .sector-card::before {
-            content: "";
-            position: absolute;
-            top: 0;
-            left: 0;
-            right: 0;
-            bottom: 0;
-            background: linear-gradient(45deg, transparent, rgba(255, 255, 255, 0.1), transparent);
-            pointer-events: none;
+            border-left: 4px solid #00C853;
         }
         .sector-name {
             font-size: 20px;
             font-weight: bold;
-            color: white;
+            color: #009A61;
             margin: 0 0 12px 0;
-            text-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
-            position: relative;
-            z-index: 1;
         }
         .sector-metrics {
-            font-size: 15px;
-            color: rgba(255, 255, 255, 0.95);
-            text-shadow: 0 1px 3px rgba(0, 0, 0, 0.12);
-            position: relative;
-            z-index: 1;
+            font-size: 14px;
+            color: #666;
         }
 
-        /* Tab styling - 天空蓝凸显模式 */
+        /* Tab styling - 菜鸟绿凸显模式 */
         .stTabs [data-baseweb="tab-list"] {
-            gap: 8px;
-            background-color: rgba(74, 144, 226, 0.08);
-            padding: 6px;
-            border-radius: 12px;
-            border: 2px solid rgba(74, 144, 226, 0.2);
+            gap: 4px;
+            background-color: #f5f5f5;
+            padding: 4px;
+            border-radius: 8px;
+            border: 1px solid #e0e0e0;
         }
         .stTabs [data-baseweb="tab"] {
-            height: 52px;
+            height: 48px;
             padding: 0 24px;
-            border-radius: 10px;
-            background-color: transparent;
-            color: #2c3e50;
-            font-weight: 600;
-            font-size: 16px;
+            border-radius: 6px;
+            background-color: white;
+            color: #666;
+            font-weight: 500;
+            font-size: 15px;
             border: 2px solid transparent;
             transition: all 0.2s ease;
         }
         .stTabs [aria-selected="true"] {
-            background: linear-gradient(135deg, #4A90E2 0%, #6BB9F0 100%) !important;
+            background-color: #009A61 !important;
             color: white !important;
-            border-color: transparent;
-            box-shadow: 0 4px 12px rgba(74, 144, 226, 0.3);
-            text-shadow: 0 1px 2px rgba(0, 0, 0, 0.1);
+            border-color: #009A61;
+            font-weight: 600;
         }
         .stTabs [data-baseweb="tab"]:hover {
-            background-color: rgba(74, 144, 226, 0.12);
-            color: #4A90E2;
+            background-color: rgba(0, 154, 97, 0.08);
+            color: #009A61;
         }
         .stTabs [aria-selected="true"]:hover {
-            background: linear-gradient(135deg, #4A90E2 0%, #6BB9F0 100%) !important;
+            background-color: #009A61 !important;
             color: white !important;
         }
 
-        /* Button styling - 天空蓝 */
+        /* Button styling - 菜鸟绿 */
         .stButton > button {
-            background: linear-gradient(135deg, #4A90E2 0%, #6BB9F0 100%);
+            background-color: #009A61;
             color: white;
             border: none;
             padding: 10px 20px;
-            border-radius: 10px;
+            border-radius: 6px;
             font-weight: 600;
             transition: all 0.2s ease;
-            box-shadow: 0 4px 12px rgba(74, 144, 226, 0.2);
-            position: relative;
-            z-index: 1;
         }
         .stButton > button:hover {
-            background: linear-gradient(135deg, #3A7BC8 0%, #5BA8E0 100%);
-            box-shadow: 0 6px 16px rgba(74, 144, 226, 0.35);
-            transform: translateY(-1px);
-        }
-        .stButton > button:active {
-            transform: translateY(0);
+            background-color: #008052;
+            box-shadow: 0 2px 8px rgba(0, 154, 97, 0.2);
         }
         </style>
     """, unsafe_allow_html=True)
@@ -257,7 +234,7 @@ def sector_grid(sectors: list, storage=None, on_sector_click=None):
                                     'avg_score': avg_score
                                 }
 
-                        # Display colored sector card
+                        # Display colored sector card with white background and green border
                         st.markdown(f"""
                             <div class="sector-card sector-card-industry">
                                 <h3 class="sector-name">{sector_name}</h3>
@@ -297,7 +274,7 @@ def sector_grid(sectors: list, storage=None, on_sector_click=None):
                                     'avg_score': avg_score
                                 }
 
-                        # Display colored sector card
+                        # Display colored sector card with white background and green border
                         st.markdown(f"""
                             <div class="sector-card sector-card-concept">
                                 <h3 class="sector-name">{sector_name}</h3>
@@ -318,8 +295,8 @@ def sector_grid(sectors: list, storage=None, on_sector_click=None):
 def footer():
     """Display fourth layer - footer at bottom of page."""
     st.markdown("""
-        <div style='text-align: center; padding: 20px 0; background: linear-gradient(135deg, rgba(74, 144, 226, 0.08) 0%, rgba(135, 206, 235, 0.08) 100%); border-radius: 12px; margin-top: 30px;'>
-            <p style='margin: 0; color: #4A90E2; font-weight: 600;'>人机协同A股智能投资决策系统 v0.4.0 | 预测仅供参考，投资风险自担</p>
+        <div style='text-align: center; padding: 20px 0; background-color: #f5f5f5; border-radius: 12px; margin-top: 30px; border-top: 2px solid #009A61;'>
+            <p style='margin: 0; color: #666; font-size: 14px;'>人机协同A股智能投资决策系统 v0.4.0 | 预测仅供参考，投资风险自担</p>
         </div>
     """, unsafe_allow_html=True)
 
