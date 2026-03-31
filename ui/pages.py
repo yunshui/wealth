@@ -545,45 +545,65 @@ def _update_stocks_data(storage: StockStorage):
                 return (False, symbol)
 
             try:
+                # Check if stock info needs update (missing name)
+                stock_info = thread_storage.get_stock(symbol)
+                needs_info_update = not stock_info or not stock_info.get('name')
+
                 # Skip if already has recent data (check last 3 days)
+                skip_data_update = False
                 try:
                     latest_data = thread_storage.get_latest_stock_data(symbol)
                     if latest_data and latest_data.get('date'):
                         from datetime import datetime as dt
                         last_date = dt.strptime(latest_data['date'], '%Y-%m-%d')
                         if (dt.now() - last_date).days < 3:
-                            return (False, symbol)  # Skip, data is recent
+                            skip_data_update = True  # Skip historical data, but still check stock info
                 except Exception:
                     pass
 
-                # Get historical data (main bottleneck)
-                history_df = thread_fetcher.get_stock_history(symbol, start_date, end_date)
+                # Get historical data if needed
+                if not skip_data_update:
+                    history_df = thread_fetcher.get_stock_history(symbol, start_date, end_date)
 
-                if history_df is None or history_df.empty:
-                    return (False, symbol)
+                    if history_df is None or history_df.empty:
+                        return (False, symbol)
 
-                # Calculate indicators
-                history_df = thread_calculator.calculate_all(history_df)
+                    # Calculate indicators
+                    history_df = thread_calculator.calculate_all(history_df)
 
-                # Save historical data
-                thread_storage.save_stock_data(history_df)
+                    # Save historical data
+                    thread_storage.save_stock_data(history_df)
 
-                # Get and save stock information (including name)
-                stock_info = thread_fetcher.get_stock_info(symbol)
-                if stock_info and 'item' in stock_info:
-                    info_dict = stock_info['item']
-                    value_dict = stock_info['value']
-                    stock_data = {
-                        'symbol': symbol,
-                        'name': value_dict.get('股票简称', ''),
-                        'industry': value_dict.get('行业', ''),
-                        'sector': sector_name,
-                        'market_cap': value_dict.get('总市值', 0),
-                        'pe_ratio': 0,  # Not available in this API
-                        'pb_ratio': 0,  # Not available in this API
-                        'list_date': str(value_dict.get('上市时间', ''))
-                    }
-                    thread_storage.save_stock(stock_data)
+                # Always get and save stock information if needed
+                if needs_info_update:
+                    stock_api_info = thread_fetcher.get_stock_info(symbol)
+                    if stock_api_info and 'item' in stock_api_info and 'value' in stock_api_info:
+                        item_dict = stock_api_info['item']
+                        value_dict = stock_api_info['value']
+
+                        # Find index for each field
+                        name_index = industry_index = market_cap_index = list_date_index = None
+                        for idx, field_name in item_dict.items():
+                            if field_name == '股票简称':
+                                name_index = idx
+                            elif field_name == '行业':
+                                industry_index = idx
+                            elif field_name == '总市值':
+                                market_cap_index = idx
+                            elif field_name == '上市时间':
+                                list_date_index = idx
+
+                        stock_data = {
+                            'symbol': symbol,
+                            'name': value_dict.get(name_index, '') if name_index is not None else '',
+                            'industry': value_dict.get(industry_index, '') if industry_index is not None else '',
+                            'sector': sector_name,
+                            'market_cap': value_dict.get(market_cap_index, 0) if market_cap_index is not None else 0,
+                            'pe_ratio': 0,  # Not available in this API
+                            'pb_ratio': 0,  # Not available in this API
+                            'list_date': str(value_dict.get(list_date_index, '')) if list_date_index is not None else ''
+                        }
+                        thread_storage.save_stock(stock_data)
 
                 return (True, symbol)
 
