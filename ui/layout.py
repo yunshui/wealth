@@ -129,10 +129,12 @@ def sector_grid(sectors: list, storage=None, on_sector_click=None):
                 with cols[j]:
                     sector_name = sector['sector_name']
                     sector_id = sector.get('sector_id', '')
+                    # Use sector name as fallback for unique key
+                    button_key = sector_id if sector_id else f"sec_{sector_name}"
 
                     # Get sector metrics if storage is provided
                     metrics = {}
-                    if storage:
+                    if storage and sector_id:
                         leaders = storage.get_sector_leaders(sector_id)
                         if leaders:
                             # Calculate simple metrics
@@ -145,7 +147,7 @@ def sector_grid(sectors: list, storage=None, on_sector_click=None):
 
                     # Display sector card with metrics
                     with st.container():
-                        if st.button(sector_name, key=f"sector_{sector_id}", use_container_width=True):
+                        if st.button(sector_name, key=f"sector_{button_key}", use_container_width=True):
                             if on_sector_click:
                                 on_sector_click(sector)
                             st.rerun()
@@ -163,10 +165,12 @@ def sector_grid(sectors: list, storage=None, on_sector_click=None):
                 with cols[j]:
                     sector_name = sector['sector_name']
                     sector_id = sector.get('sector_id', '')
+                    # Use sector name as fallback for unique key
+                    button_key = sector_id if sector_id else f"sec_{sector_name}"
 
                     # Get sector metrics if storage is provided
                     metrics = {}
-                    if storage:
+                    if storage and sector_id:
                         leaders = storage.get_sector_leaders(sector_id)
                         if leaders:
                             total_stocks = len(leaders)
@@ -178,7 +182,7 @@ def sector_grid(sectors: list, storage=None, on_sector_click=None):
 
                     # Display sector card with metrics
                     with st.container():
-                        if st.button(sector_name, key=f"sector_{sector_id}", use_container_width=True):
+                        if st.button(sector_name, key=f"sector_{button_key}", use_container_width=True):
                             if on_sector_click:
                                 on_sector_click(sector)
                             st.rerun()

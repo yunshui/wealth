@@ -42,9 +42,8 @@ def load_key_sectors():
     if os.path.exists(config_path):
         with open(config_path, 'r', encoding='utf-8') as f:
             config = json.load(f)
-            key_sectors = config.get('key_sectors', {})
-            key_sector_names.update(key_sectors.get('industry', []))
-            key_sector_names.update(key_sectors.get('concept', []))
+            sectors = config.get('sectors', [])
+            key_sector_names.update(s['name'] for s in sectors)
 
     return key_sector_names
 

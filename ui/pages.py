@@ -428,7 +428,7 @@ def show_data_update():
 
 
 def _update_sectors_data(storage: StockStorage):
-    """Update sectors and leaders data from key sectors in config.
+    """Update sectors and leaders data from config file.
 
     Args:
         storage: StockStorage instance for data operations
@@ -445,60 +445,75 @@ def _update_sectors_data(storage: StockStorage):
         fetcher = DataFetcher()
         analyzer = SectorAnalyzer(storage)
 
-        # Load key sectors config
+        # Load sectors config
         config_path = os.path.join(os.path.dirname(__file__), '..', 'config', 'sectors.json')
-        key_sectors = []
-        if os.path.exists(config_path):
-            with open(config_path, 'r', encoding='utf-8') as f:
-                config = json.load(f)
-                key_sectors = config.get('key_sectors', {})
 
-        # Step 1: Get all sectors from API
-        update_placeholder.info("正在获取板块列表...")
-        industry_sectors = fetcher.get_industry_sectors()
-        concept_sectors = fetcher.get_concept_sectors()
+        if not os.path.exists(config_path):
+            st.error("配置文件不存在: config/sectors.json")
+            return
 
-        # Step 2: Filter and save only key sectors
-        update_placeholder.info("正在保存关键板块数据...")
+        with open(config_path, 'r', encoding='utf-8') as f:
+            config = json.load(f)
 
-        key_industry_names = key_sectors.get('industry', [])
-        key_concept_names = key_sectors.get('concept', [])
+        sectors_config = config.get('sectors', [])
 
-        saved_industry = 0
-        saved_concept = 0
+        # Step 1: Save sectors from config to database
+        update_placeholder.info("正在保存板块数据...")
 
-        for _, sector in industry_sectors.iterrows():
-            sector_name = sector['板块名称']
-            if not key_industry_names or sector_name in key_industry_names:
-                storage.save_sector({
-                    'sector_id': sector['板块代码'],
-                    'sector_name': sector_name,
-                    'sector_type': 'industry'
-                })
-                saved_industry += 1
+        saved_count = 0
+        for sector_config in sectors_config:
+            sector_name = sector_config['name']
+            sector_type = sector_config['type']
 
-        for _, sector in concept_sectors.iterrows():
-            sector_name = sector['板块名称']
-            if not key_concept_names or sector_name in key_concept_names:
-                storage.save_sector({
-                    'sector_id': sector['板块代码'],
-                    'sector_name': sector_name,
-                    'sector_type': 'concept'
-                })
-                saved_concept += 1
+            # Generate a unique sector_id based on name and type
+            sector_id = f"{sector_type}_{sector_name}"
 
-        # Step 3: Update sector leaders for key sectors only
+            # Save to database
+            storage.save_sector({
+                'sector_id': sector_id,
+                'sector_name': sector_name,
+                'sector_type': sector_type
+            })
+
+            # Store the sector_id back to config
+            sector_config['sector_id'] = sector_id
+            saved_count += 1
+
+        # Step 2: Update sector leaders and save to config
         update_placeholder.info("正在更新板块龙头股...")
-        analyzer.update_all_sector_leaders()
 
-        st.success(f"✅ 板块数据更新完成! 已保存 {saved_industry} 个行业板块, {saved_concept} 个概念板块")
+        updated_leaders_count = 0
+
+        for sector_config in sectors_config:
+            sector_name = sector_config['name']
+
+            # Get leaders from database directly by name
+            leaders = storage.get_sector_leaders_by_name(sector_name)
+
+            # Update config with leaders
+            sector_config['leaders'] = []
+
+            if leaders:
+                for leader in leaders[:10]:  # Top 10 leaders
+                    sector_config['leaders'].append({
+                        'symbol': leader.get('symbol', ''),
+                        'rank': leader.get('rank', 0),
+                        'score': leader.get('score', 0)
+                    })
+                updated_leaders_count += 1
+
+        # Step 3: Save updated config back to file
+        with open(config_path, 'w', encoding='utf-8') as f:
+            json.dump(config, f, ensure_ascii=False, indent=2)
+
+        st.success(f"✅ 板块数据更新完成! 已更新 {saved_count} 个板块, {updated_leaders_count} 个板块龙头股")
 
     except Exception as e:
         st.error(f"更新失败: {str(e)}")
 
 
 def _update_stocks_data(storage: StockStorage):
-    """Update stock data for all sectors using parallel processing.
+    """Update stock data for all sectors using parallel processing from config.
 
     Args:
         storage: StockStorage instance for data operations
@@ -516,21 +531,22 @@ def _update_stocks_data(storage: StockStorage):
         fetcher = DataFetcher()
         calculator = IndicatorCalculator()
 
-        # Load config for data retention
+        # Load config
         config_path = os.path.join(os.path.dirname(__file__), '..', 'config', 'sectors.json')
-        years_to_keep = 7
-        if os.path.exists(config_path):
-            with open(config_path, 'r', encoding='utf-8') as f:
-                config = json.load(f)
-                years_to_keep = config.get('data_retention', {}).get('years_to_keep', 7)
 
-        # Get all sectors
-        update_placeholder.info("正在获取板块列表...")
-        sectors = storage.get_all_sectors()
-
-        if not sectors:
-            st.warning("请先更新板块数据")
+        if not os.path.exists(config_path):
+            st.error("配置文件不存在: config/sectors.json")
             return
+
+        with open(config_path, 'r', encoding='utf-8') as f:
+            config = json.load(f)
+
+        sectors_config = config.get('sectors', [])
+        update_config = config.get('update_config', {})
+        years_to_keep = update_config.get('years_to_keep', 7)
+        parallel_workers = update_config.get('parallel_workers', 8)
+
+        update_placeholder.info(f"正在获取 {len(sectors_config)} 个板块配置...")
 
         # Calculate date range
         end_date = datetime.now().strftime('%Y%m%d')
@@ -539,16 +555,16 @@ def _update_stocks_data(storage: StockStorage):
         # Thread-safe counters
         total_lock = threading.Lock()
         processed_stocks = 0
-        total_sectors = len(sectors)
+        total_sectors = len(sectors_config)
 
         # Progress tracking
         sectors_processed = 0
 
-        def process_sector(sector: Dict) -> int:
+        def process_sector(sector_config: Dict) -> int:
             """Process a single sector and return count of stocks processed.
 
             Args:
-                sector: Sector dictionary
+                sector_config: Sector config dictionary
 
             Returns:
                 Number of stocks processed
@@ -561,8 +577,8 @@ def _update_stocks_data(storage: StockStorage):
             thread_fetcher = DataFetcher()
             thread_calculator = IndicatorCalculator()
 
-            sector_name = sector['sector_name']
-            sector_type = sector['sector_type']
+            sector_name = sector_config['name']
+            sector_type = sector_config['type']
             stocks_processed = 0
 
             try:
@@ -625,11 +641,11 @@ def _update_stocks_data(storage: StockStorage):
             return stocks_processed
 
         # Process sectors in parallel
-        max_workers = min(8, len(sectors))  # Limit to 8 concurrent workers
+        max_workers = min(parallel_workers, total_sectors)
 
         with ThreadPoolExecutor(max_workers=max_workers) as executor:
             # Submit all tasks
-            futures = {executor.submit(process_sector, sector): sector for sector in sectors}
+            futures = {executor.submit(process_sector, sector): sector for sector in sectors_config}
 
             # Process completed tasks and update progress
             for future in as_completed(futures):

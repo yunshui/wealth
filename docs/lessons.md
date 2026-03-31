@@ -120,6 +120,123 @@ div.stButton > button:first-child {
 - 选中状态可以用HTML渲染替代，避免样式冲突
 - 使用 `display: inline-flex` 和 `justify-content: flex-start` 确保按钮内容左对齐
 
+## 16. Streamlit 重复元素 key 错误
+
+### 问题
+```python
+streamlit.errors.StreamlitDuplicateElementKey: There are multiple elements with the same `key='sector_None'`
+```
+
+### 原因
+- 多个板块按钮使用了相同的 key
+- 配置文件中缺少 `sector_id` 字段
+- 缺少唯一标识符导致 key 冲突
+
+### 解决方案
+```python
+# 1. 为每个板块添加唯一的 sector_id
+sector_id = f"{sector_type}_{sector_name}"
+
+# 2. 使用 fallback 机制处理缺失的 ID
+button_key = sector_id if sector_id else f"sec_{sector_name}"
+
+# 3. 生成按钮时使用唯一 key
+st.button(sector_name, key=f"sector_{button_key}", use_container_width=True)
+```
+
+### 经验教训
+- Streamlit 的每个交互元素必须有唯一的 key
+- 对于动态生成的列表元素，使用组合字段生成唯一 key
+- 配置文件设计时应包含唯一标识符字段
+- 使用 fallback 机制处理可能缺失的字段
+
+## 17. 数据层方法缺失导致运行时错误
+
+### 问题
+```python
+AttributeError: 'StockStorage' object has no attribute 'get_sectors_by_name'
+```
+
+### 原因
+- 数据层类缺少必要的方法
+- 调用方使用了未实现的方法
+- 需求变更后未同步更新数据层
+
+### 解决方案
+```python
+# 添加缺失的方法到数据层
+def get_sectors_by_name(self, sector_name: str) -> List[Dict]:
+    """Get sectors by name."""
+    conn = self.db.get_connection()
+    cursor = conn.cursor()
+    cursor.execute('''
+        SELECT sector_id, sector_name, sector_type, leader_count
+        FROM sectors WHERE sector_name = ?
+    ''', (sector_name,))
+    # ... 返回结果
+
+def get_sector_leaders_by_name(self, sector_name: str) -> List[Dict]:
+    """Get sector leaders by sector name."""
+    # ... 实现
+```
+
+### 经验教训
+- 数据层方法应与业务层需求同步设计
+- 使用前先验证方法是否存在
+- 优先使用名称查询而非 ID 查询（更灵活）
+- 添加新功能时同步更新数据层接口
+
+## 18. 配置文件驱动的板块管理
+
+### 问题
+板块信息分散在数据库和配置文件中，导致维护困难。
+
+### 解决方案
+```json
+{
+  "sectors": [
+    {
+      "sector_id": "industry_白酒",
+      "name": "白酒",
+      "type": "industry",
+      "leaders": [
+        {
+          "symbol": "600519.SH",
+          "rank": 1,
+          "score": 0.95
+        }
+      ]
+    }
+  ],
+  "update_config": {
+    "years_to_keep": 7,
+    "parallel_workers": 8
+  }
+}
+```
+
+```python
+# 从配置文件读取板块列表
+def load_sectors_from_config():
+    with open('config/sectors.json', 'r', encoding='utf-8') as f:
+        config = json.load(f)
+    return config.get('sectors', [])
+
+# 更新龙头股到配置文件
+def save_leaders_to_config(sector_name, leaders):
+    with open('config/sectors.json', 'r+', encoding='utf-8') as f:
+        config = json.load(f)
+        # 更新 leaders
+        json.dump(config, f, ensure_ascii=False, indent=2)
+```
+
+### 经验教训
+- 配置文件作为单一真实来源（Single Source of Truth）
+- 板块列表和龙头股信息都保存在配置文件
+- 数据库用于存储详细的历史数据
+- 配置文件便于版本控制和手动编辑
+- 使用 `ensure_ascii=False` 正确处理中文
+
 ---
 
 # 第三部分：运行时问题解决

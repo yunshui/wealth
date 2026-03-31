@@ -95,6 +95,36 @@ class StockStorage:
             Logger.error(f"Failed to get sector: {str(e)}")
             raise StorageException(f"Failed to get sector: {str(e)}")
 
+    def get_sectors_by_name(self, sector_name: str) -> List[Dict]:
+        """Get sectors by name.
+
+        Args:
+            sector_name: Sector name to search
+
+        Returns:
+            List of sector dictionaries matching the name
+        """
+        try:
+            conn = self.db.get_connection()
+            cursor = conn.cursor()
+            cursor.execute('''
+                SELECT sector_id, sector_name, sector_type, leader_count
+                FROM sectors WHERE sector_name = ?
+            ''', (sector_name,))
+            rows = cursor.fetchall()
+            return [
+                {
+                    'sector_id': row['sector_id'],
+                    'sector_name': row['sector_name'],
+                    'sector_type': row['sector_type'],
+                    'leader_count': row['leader_count']
+                }
+                for row in rows
+            ]
+        except Exception as e:
+            Logger.error(f"Failed to get sectors by name: {str(e)}")
+            raise StorageException(f"Failed to get sectors by name: {str(e)}")
+
     # ========== Stock Operations ==========
 
     def save_stock(self, stock_data: Dict) -> bool:
@@ -400,3 +430,36 @@ class StockStorage:
         except Exception as e:
             Logger.error(f"Failed to get sector leaders: {str(e)}")
             raise StorageException(f"Failed to get sector leaders: {str(e)}")
+
+    def get_sector_leaders_by_name(self, sector_name: str) -> List[Dict]:
+        """Get sector leaders by sector name.
+
+        Args:
+            sector_name: Sector name
+
+        Returns:
+            List of leader stock dictionaries
+        """
+        try:
+            conn = self.db.get_connection()
+            cursor = conn.cursor()
+            cursor.execute('''
+                SELECT sector_id, sector_name, symbol, score, rank, market_cap_rank, volume_rank
+                FROM sector_leaders WHERE sector_name = ? ORDER BY rank
+            ''', (sector_name,))
+            rows = cursor.fetchall()
+            return [
+                {
+                    'sector_id': row['sector_id'],
+                    'sector_name': row['sector_name'],
+                    'symbol': row['symbol'],
+                    'score': row['score'],
+                    'rank': row['rank'],
+                    'market_cap_rank': row['market_cap_rank'],
+                    'volume_rank': row['volume_rank']
+                }
+                for row in rows
+            ]
+        except Exception as e:
+            Logger.error(f"Failed to get sector leaders by name: {str(e)}")
+            raise StorageException(f"Failed to get sector leaders by name: {str(e)}")
