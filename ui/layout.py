@@ -104,7 +104,7 @@ def navigation():
 
 
 def sector_grid(sectors: list, storage=None, on_sector_click=None):
-    """Display third layer - sector grid with multiple rows and key metrics.
+    """Display third layer - sector grid with multiple rows and key metrics using tabs.
 
     Args:
         sectors: List of sector dictionaries with 'sector_name', 'sector_type' keys
@@ -119,76 +119,122 @@ def sector_grid(sectors: list, storage=None, on_sector_click=None):
     industry_sectors = [s for s in sectors if s['sector_type'] == 'industry']
     concept_sectors = [s for s in sectors if s['sector_type'] == 'concept']
 
-    # Display industry sectors
-    if industry_sectors:
-        st.markdown("### 🏭 行业板块")
-        cols_per_row = 4  # Changed from 5 to 4 for more space
-        for i in range(0, len(industry_sectors), cols_per_row):
-            cols = st.columns(cols_per_row)
-            for j, sector in enumerate(industry_sectors[i:i+cols_per_row]):
-                with cols[j]:
-                    sector_name = sector['sector_name']
-                    sector_id = sector.get('sector_id', '')
-                    # Use sector name as fallback for unique key
-                    button_key = sector_id if sector_id else f"sec_{sector_name}"
+    # Custom CSS for sector cards
+    st.markdown("""
+        <style>
+        .sector-card {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            padding: 20px;
+            border-radius: 12px;
+            margin: 10px 0;
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.1);
+            transition: transform 0.2s, box-shadow 0.2s;
+        }
+        .sector-card:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 20px rgba(0, 0, 0, 0.15);
+        }
+        .sector-card-industry {
+            background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
+        }
+        .sector-card-concept {
+            background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);
+        }
+        .sector-name {
+            font-size: 18px;
+            font-weight: bold;
+            color: white;
+            margin: 0 0 10px 0;
+        }
+        .sector-metrics {
+            font-size: 14px;
+            color: rgba(255, 255, 255, 0.9);
+        }
+        </style>
+    """, unsafe_allow_html=True)
 
-                    # Get sector metrics if storage is provided
-                    metrics = {}
-                    if storage and sector_id:
-                        leaders = storage.get_sector_leaders(sector_id)
-                        if leaders:
-                            # Calculate simple metrics
-                            total_stocks = len(leaders)
-                            avg_score = sum(l.get('score', 0) for l in leaders) / total_stocks if total_stocks > 0 else 0
-                            metrics = {
-                                'stocks': total_stocks,
-                                'avg_score': avg_score
-                            }
+    # Use tabs to switch between industry and concept sectors
+    tab1, tab2 = st.tabs(["🏭 行业板块", "💡 概念板块"])
 
-                    # Display sector card with metrics
-                    with st.container():
-                        if st.button(sector_name, key=f"sector_{button_key}", use_container_width=True):
+    with tab1:
+        if industry_sectors:
+            cols_per_row = 3
+            for i in range(0, len(industry_sectors), cols_per_row):
+                cols = st.columns(cols_per_row)
+                for j, sector in enumerate(industry_sectors[i:i+cols_per_row]):
+                    with cols[j]:
+                        sector_name = sector['sector_name']
+                        sector_id = sector.get('sector_id', '')
+                        button_key = f"ind_{i}_{j}"
+
+                        # Get sector metrics
+                        metrics = {}
+                        if storage and sector_id:
+                            leaders = storage.get_sector_leaders(sector_id)
+                            if leaders:
+                                total_stocks = len(leaders)
+                                avg_score = sum(l.get('score', 0) for l in leaders) / total_stocks if total_stocks > 0 else 0
+                                metrics = {
+                                    'stocks': total_stocks,
+                                    'avg_score': avg_score
+                                }
+
+                        # Display colored sector card
+                        st.markdown(f"""
+                            <div class="sector-card sector-card-industry">
+                                <h3 class="sector-name">{sector_name}</h3>
+                                <p class="sector-metrics">
+                                    🏆 龙头: {metrics.get('stocks', 0)}只 | ⭐ 均分: {metrics.get('avg_score', 0):.1f}
+                                </p>
+                            </div>
+                        """, unsafe_allow_html=True)
+
+                        if st.button("查看详情", key=f"btn_{button_key}", use_container_width=True):
                             if on_sector_click:
                                 on_sector_click(sector)
                             st.rerun()
+        else:
+            st.info("暂无行业板块数据")
 
-                        if metrics:
-                            st.caption(f"龙头: {metrics['stocks']}只 | 均分: {metrics['avg_score']:.1f}")
+    with tab2:
+        if concept_sectors:
+            cols_per_row = 3
+            for i in range(0, len(concept_sectors), cols_per_row):
+                cols = st.columns(cols_per_row)
+                for j, sector in enumerate(concept_sectors[i:i+cols_per_row]):
+                    with cols[j]:
+                        sector_name = sector['sector_name']
+                        sector_id = sector.get('sector_id', '')
+                        button_key = f"con_{i}_{j}"
 
-    # Display concept sectors
-    if concept_sectors:
-        st.markdown("### 💡 概念板块")
-        cols_per_row = 4
-        for i in range(0, len(concept_sectors), cols_per_row):
-            cols = st.columns(cols_per_row)
-            for j, sector in enumerate(concept_sectors[i:i+cols_per_row]):
-                with cols[j]:
-                    sector_name = sector['sector_name']
-                    sector_id = sector.get('sector_id', '')
-                    # Use sector name as fallback for unique key
-                    button_key = sector_id if sector_id else f"sec_{sector_name}"
+                        # Get sector metrics
+                        metrics = {}
+                        if storage and sector_id:
+                            leaders = storage.get_sector_leaders(sector_id)
+                            if leaders:
+                                total_stocks = len(leaders)
+                                avg_score = sum(l.get('score', 0) for l in leaders) / total_stocks if total_stocks > 0 else 0
+                                metrics = {
+                                    'stocks': total_stocks,
+                                    'avg_score': avg_score
+                                }
 
-                    # Get sector metrics if storage is provided
-                    metrics = {}
-                    if storage and sector_id:
-                        leaders = storage.get_sector_leaders(sector_id)
-                        if leaders:
-                            total_stocks = len(leaders)
-                            avg_score = sum(l.get('score', 0) for l in leaders) / total_stocks if total_stocks > 0 else 0
-                            metrics = {
-                                'stocks': total_stocks,
-                                'avg_score': avg_score
-                            }
+                        # Display colored sector card
+                        st.markdown(f"""
+                            <div class="sector-card sector-card-concept">
+                                <h3 class="sector-name">{sector_name}</h3>
+                                <p class="sector-metrics">
+                                    🏆 龙头: {metrics.get('stocks', 0)}只 | ⭐ 均分: {metrics.get('avg_score', 0):.1f}
+                                </p>
+                            </div>
+                        """, unsafe_allow_html=True)
 
-                    # Display sector card with metrics
-                    with st.container():
-                        if st.button(sector_name, key=f"sector_{button_key}", use_container_width=True):
+                        if st.button("查看详情", key=f"btn_{button_key}", use_container_width=True):
                             if on_sector_click:
                                 on_sector_click(sector)
                             st.rerun()
-
-                        if metrics:
-                            st.caption(f"龙头: {metrics['stocks']}只 | 均分: {metrics['avg_score']:.1f}")
+        else:
+            st.info("暂无概念板块数据")
 
 
 def footer():
