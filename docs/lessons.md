@@ -69,9 +69,62 @@
 
 ---
 
-# 第二部分：运行时问题解决
+# 第二部分：UI开发阶段
 
-## 5. 类型提示导入缺失
+## 15. Streamlit按钮左对齐问题
+
+### 问题
+Streamlit的st.button默认居中对齐，当选中和未选中状态切换时，对齐方式不一致（未选中居中，选中后左对齐）。
+
+### 原因
+- Streamlit的默认样式包含居中对齐
+- CSS选择器优先级不够高
+- 父容器的对齐属性影响按钮位置
+
+### 解决方案
+```css
+/* 容器级别强制左对齐 */
+div[data-testid="stVerticalBlock"] > div[data-testid="column"] {
+    display: flex !important;
+    flex-direction: column !important;
+    align-items: flex-start !important;
+}
+
+/* 按钮容器左对齐 */
+div.stButton {
+    display: flex !important;
+    justify-content: flex-start !important;
+    align-items: flex-start !important;
+    width: 100% !important;
+}
+
+/* 按钮样式 */
+div.stButton > button:first-child {
+    border: none !important;
+    text-align: left !important;
+    display: inline-flex !important;
+    justify-content: flex-start !important;
+    align-items: center !important;
+}
+
+/* 移除所有可能的居中 */
+[data-testid="stVerticalBlock"] {
+    align-items: flex-start !important;
+}
+```
+
+### 经验教训
+- Streamlit默认样式很难覆盖，需要多层CSS选择器
+- 使用 `!important` 提高优先级
+- 需要同时处理按钮、按钮容器和父容器的对齐
+- 选中状态可以用HTML渲染替代，避免样式冲突
+- 使用 `display: inline-flex` 和 `justify-content: flex-start` 确保按钮内容左对齐
+
+---
+
+# 第三部分：运行时问题解决
+
+## 6. 类型提示导入缺失
 
 ### 问题
 ```python
