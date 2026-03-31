@@ -9,7 +9,7 @@ import threading
 
 from data.storage import StockStorage
 from data.database import DatabaseManager
-from ui.layout import color_for_change, format_change, render_card, footer
+from ui.layout import color_for_change, format_change, render_card, footer_right
 from ui.charts import plot_kline_chart, plot_volume_chart, plot_indicator_chart
 from ui.prediction import render_horizon_card, render_ensemble_card
 from prediction.ensemble import EnsemblePredictor
@@ -372,8 +372,6 @@ def _render_prediction_placeholder():
 
 def show_data_update():
     """Display data update interface."""
-    st.header("🔄 数据更新")
-
     from analysis.indicators import IndicatorCalculator
     from analysis.sector import SectorAnalyzer
     from data.fetcher import DataFetcher
@@ -799,11 +797,4 @@ def _update_indicators_data(storage: StockStorage):
 
 def show_history():
     """Display history review page."""
-    st.header("📜 历史预测回顾")
     st.info("🚀 历史回顾功能将在后续实现")
-    st.write("""
-    本页面将展示:
-    - 预测准确率统计
-    - 准确率趋势图
-    - 历史预测记录
-    """)
