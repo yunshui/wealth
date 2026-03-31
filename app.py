@@ -38,6 +38,20 @@ def load_sectors():
     return storage.get_all_sectors()
 
 
+def get_stock_name(storage: StockStorage, symbol: str) -> str:
+    """Helper function to safely get stock name.
+
+    Args:
+        storage: StockStorage instance
+        symbol: Stock symbol
+
+    Returns:
+        Stock name or 'Unknown' if not found
+    """
+    stock_data = storage.get_stock(symbol)
+    return stock_data.get('name', 'Unknown') if stock_data else 'Unknown'
+
+
 # Layer 1: Header
 header()
 
@@ -88,9 +102,10 @@ with content_col:
                 st.markdown("### 龙头股 Top 5")
                 for i, leader in enumerate(leaders[:5], 1):
                     symbol = leader.get('symbol', '')
+                    name = get_stock_name(storage, symbol)
                     score = leader.get('score', 0)
                     rank = leader.get('rank', 0)
-                    st.write(f"{i}. {symbol} - 得分: {score:.2f} (排名: {rank})")
+                    st.write(f"{i}. {symbol} - {name} - 得分: {score:.2f} (排名: {rank})")
 
             if st.button("← 返回板块列表"):
                 st.session_state.selected_sector = None

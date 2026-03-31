@@ -565,8 +565,26 @@ def _update_stocks_data(storage: StockStorage):
                 # Calculate indicators
                 history_df = thread_calculator.calculate_all(history_df)
 
-                # Save data
+                # Save historical data
                 thread_storage.save_stock_data(history_df)
+
+                # Get and save stock information (including name)
+                stock_info = thread_fetcher.get_stock_info(symbol)
+                if stock_info and 'item' in stock_info:
+                    info_dict = stock_info['item']
+                    value_dict = stock_info['value']
+                    stock_data = {
+                        'symbol': symbol,
+                        'name': value_dict.get('股票简称', ''),
+                        'industry': value_dict.get('行业', ''),
+                        'sector': sector_name,
+                        'market_cap': value_dict.get('总市值', 0),
+                        'pe_ratio': 0,  # Not available in this API
+                        'pb_ratio': 0,  # Not available in this API
+                        'list_date': str(value_dict.get('上市时间', ''))
+                    }
+                    thread_storage.save_stock(stock_data)
+
                 return (True, symbol)
 
             except Exception as e:
