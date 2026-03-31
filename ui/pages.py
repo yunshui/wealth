@@ -4,6 +4,8 @@ import streamlit as st
 import pandas as pd
 from datetime import datetime
 from typing import Dict
+from concurrent.futures import ThreadPoolExecutor, as_completed
+import threading
 
 from data.storage import StockStorage
 from data.database import DatabaseManager
@@ -473,7 +475,7 @@ def _update_sectors_data(storage: StockStorage):
 
 
 def _update_stocks_data(storage: StockStorage):
-    """Update stock data for all sectors.
+    """Update stock data for all sectors using parallel processing.
 
     Args:
         storage: StockStorage instance for data operations
@@ -483,6 +485,7 @@ def _update_stocks_data(storage: StockStorage):
     from datetime import datetime, timedelta
 
     update_placeholder = st.empty()
+    progress_placeholder = st.empty()
 
     try:
         fetcher = DataFetcher()
@@ -500,21 +503,41 @@ def _update_stocks_data(storage: StockStorage):
         end_date = datetime.now().strftime('%Y%m%d')
         start_date = (datetime.now() - timedelta(days=7*365)).strftime('%Y%m%d')
 
+        # Thread-safe counters
+        total_lock = threading.Lock()
+        processed_stocks = 0
         total_sectors = len(sectors)
-        total_stocks = 0
 
-        for idx, sector in enumerate(sectors, 1):
+        # Progress tracking
+        sectors_processed = 0
+
+        def process_sector(sector: Dict) -> int:
+            """Process a single sector and return count of stocks processed.
+
+            Args:
+                sector: Sector dictionary
+
+            Returns:
+                Number of stocks processed
+            """
+            nonlocal sectors_processed
+
+            # Use a separate storage instance for each thread
+            db = DatabaseManager()
+            thread_storage = StockStorage(db)
+            thread_fetcher = DataFetcher()
+            thread_calculator = IndicatorCalculator()
+
             sector_name = sector['sector_name']
             sector_type = sector['sector_type']
-
-            update_placeholder.info(f"正在获取板块 ({idx}/{total_sectors}): {sector_name}")
+            stocks_processed = 0
 
             try:
                 # Get stocks in this sector
-                stocks_df = fetcher.get_sector_stocks(sector_name, sector_type)
+                stocks_df = thread_fetcher.get_sector_stocks(sector_name, sector_type)
 
                 if stocks_df is None or stocks_df.empty:
-                    continue
+                    return 0
 
                 # Process each stock
                 for _, stock_row in stocks_df.iterrows():
@@ -525,13 +548,11 @@ def _update_stocks_data(storage: StockStorage):
                     # Format symbol
                     symbol = f"{symbol}.SH" if symbol.startswith('6') else f"{symbol}.SZ"
 
-                    update_placeholder.info(f"正在获取股票数据: {symbol}")
-
                     # Get stock info
                     try:
-                        stock_info = fetcher.get_stock_info(symbol)
+                        stock_info = thread_fetcher.get_stock_info(symbol)
                         if stock_info and not stock_info.get('error'):
-                            storage.save_stock({
+                            thread_storage.save_stock({
                                 'symbol': symbol,
                                 'name': stock_info.get('股票简称', ''),
                                 'industry': stock_info.get('所属行业', ''),
@@ -541,34 +562,63 @@ def _update_stocks_data(storage: StockStorage):
                                 'pb_ratio': float(stock_info.get('市净率', 0) or 0)
                             })
                     except Exception:
-                        pass  # Skip if stock info fails
+                        pass
 
                     # Get historical data
                     try:
-                        history_df = fetcher.get_stock_history(symbol, start_date, end_date)
+                        history_df = thread_fetcher.get_stock_history(symbol, start_date, end_date)
 
                         if history_df is not None and not history_df.empty:
                             # Calculate indicators
-                            history_df = calculator.calculate_all(history_df)
+                            history_df = thread_calculator.calculate_all(history_df)
 
                             # Save data
-                            storage.save_stock_data(history_df)
-                            total_stocks += 1
+                            thread_storage.save_stock_data(history_df)
+                            stocks_processed += 1
                     except Exception:
-                        pass  # Skip if history fails
+                        pass
 
             except Exception as e:
-                Logger.warning(f"Failed to process sector {sector_name}: {str(e)}")
-                continue
+                pass
 
-        st.success(f"✅ 股票数据更新完成! 共处理 {total_stocks} 只股票")
+            finally:
+                # Update progress safely
+                with total_lock:
+                    nonlocal processed_stocks
+                    processed_stocks += stocks_processed
+                    nonlocal sectors_processed
+                    sectors_processed += 1
+
+            return stocks_processed
+
+        # Process sectors in parallel
+        max_workers = min(8, len(sectors))  # Limit to 8 concurrent workers
+
+        with ThreadPoolExecutor(max_workers=max_workers) as executor:
+            # Submit all tasks
+            futures = {executor.submit(process_sector, sector): sector for sector in sectors}
+
+            # Process completed tasks and update progress
+            for future in as_completed(futures):
+                sector = futures[future]
+                try:
+                    count = future.result()
+                    # Update progress display
+                    progress_placeholder.info(
+                        f"进度: {sectors_processed}/{total_sectors} 板块, "
+                        f"已处理 {processed_stocks} 只股票"
+                    )
+                except Exception as e:
+                    pass
+
+        st.success(f"✅ 股票数据更新完成! 共处理 {processed_stocks} 只股票")
 
     except Exception as e:
         st.error(f"更新失败: {str(e)}")
 
 
 def _update_indicators_data(storage: StockStorage):
-    """Update technical indicators for all stocks.
+    """Update technical indicators for all stocks using parallel processing.
 
     Args:
         storage: StockStorage instance for data operations
@@ -576,6 +626,7 @@ def _update_indicators_data(storage: StockStorage):
     from analysis.indicators import IndicatorCalculator
 
     update_placeholder = st.empty()
+    progress_placeholder = st.empty()
 
     try:
         # Get all stocks
@@ -586,24 +637,71 @@ def _update_indicators_data(storage: StockStorage):
             st.warning("暂无股票数据，请先更新板块和股票数据")
             return
 
-        calculator = IndicatorCalculator()
+        # Thread-safe counters
+        total_lock = threading.Lock()
+        processed_count = 0
         total = len(stocks)
 
-        for idx, stock in enumerate(stocks, 1):
-            update_placeholder.info(f"正在计算指标: {stock['name']} ({idx}/{total})")
+        def process_stock(stock: Dict) -> int:
+            """Process a single stock and return count of rows updated.
 
-            # Get historical data
-            df = storage.get_stock_data(stock['symbol'])
+            Args:
+                stock: Stock dictionary
 
-            if not df.empty:
-                # Calculate indicators
-                df_with_indicators = calculator.calculate_all(df)
+            Returns:
+                Number of rows processed
+            """
+            nonlocal processed_count
 
-                # Save updated data
-                for _, row in df_with_indicators.iterrows():
-                    storage.save_stock_data(row.to_dict())
+            # Use a separate storage instance for each thread
+            db = DatabaseManager()
+            thread_storage = StockStorage(db)
+            thread_calculator = IndicatorCalculator()
 
-        st.success(f"✅ 技术指标更新完成! 共处理 {total} 只股票")
+            rows_processed = 0
+
+            try:
+                # Get historical data
+                df = thread_storage.get_stock_data(stock['symbol'])
+
+                if not df.empty:
+                    # Calculate indicators
+                    df_with_indicators = thread_calculator.calculate_all(df)
+
+                    # Save updated data
+                    for _, row in df_with_indicators.iterrows():
+                        thread_storage.save_stock_data(row.to_dict())
+                        rows_processed += 1
+
+            except Exception:
+                pass
+
+            finally:
+                # Update progress safely
+                with total_lock:
+                    nonlocal processed_count
+                    processed_count += 1
+
+            return rows_processed
+
+        # Process stocks in parallel
+        max_workers = min(16, total)  # Limit to 16 concurrent workers
+
+        with ThreadPoolExecutor(max_workers=max_workers) as executor:
+            # Submit all tasks
+            futures = {executor.submit(process_stock, stock): stock for stock in stocks}
+
+            # Process completed tasks and update progress
+            for future in as_completed(futures):
+                stock = futures[future]
+                try:
+                    future.result()
+                    # Update progress display
+                    progress_placeholder.info(f"进度: {processed_count}/{total} 只股票")
+                except Exception:
+                    pass
+
+        st.success(f"✅ 技术指标更新完成! 共处理 {processed_count} 只股票")
 
     except Exception as e:
         st.error(f"更新失败: {str(e)}")
