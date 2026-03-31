@@ -428,7 +428,7 @@ def show_data_update():
 
 
 def _update_sectors_data(storage: StockStorage):
-    """Update sectors and leaders data.
+    """Update sectors and leaders data from key sectors in config.
 
     Args:
         storage: StockStorage instance for data operations
@@ -436,6 +436,8 @@ def _update_sectors_data(storage: StockStorage):
     from data.fetcher import DataFetcher
     from analysis.indicators import IndicatorCalculator
     from analysis.sector import SectorAnalyzer
+    import json
+    import os
 
     update_placeholder = st.empty()
 
@@ -443,32 +445,53 @@ def _update_sectors_data(storage: StockStorage):
         fetcher = DataFetcher()
         analyzer = SectorAnalyzer(storage)
 
-        # Step 1: Get sectors
+        # Load key sectors config
+        config_path = os.path.join(os.path.dirname(__file__), '..', 'config', 'sectors.json')
+        key_sectors = []
+        if os.path.exists(config_path):
+            with open(config_path, 'r', encoding='utf-8') as f:
+                config = json.load(f)
+                key_sectors = config.get('key_sectors', {})
+
+        # Step 1: Get all sectors from API
         update_placeholder.info("正在获取板块列表...")
         industry_sectors = fetcher.get_industry_sectors()
         concept_sectors = fetcher.get_concept_sectors()
 
-        # Step 2: Save sectors
-        update_placeholder.info("正在保存板块数据...")
+        # Step 2: Filter and save only key sectors
+        update_placeholder.info("正在保存关键板块数据...")
+
+        key_industry_names = key_sectors.get('industry', [])
+        key_concept_names = key_sectors.get('concept', [])
+
+        saved_industry = 0
+        saved_concept = 0
+
         for _, sector in industry_sectors.iterrows():
-            storage.save_sector({
-                'sector_id': sector['板块代码'],
-                'sector_name': sector['板块名称'],
-                'sector_type': 'industry'
-            })
+            sector_name = sector['板块名称']
+            if not key_industry_names or sector_name in key_industry_names:
+                storage.save_sector({
+                    'sector_id': sector['板块代码'],
+                    'sector_name': sector_name,
+                    'sector_type': 'industry'
+                })
+                saved_industry += 1
 
         for _, sector in concept_sectors.iterrows():
-            storage.save_sector({
-                'sector_id': sector['板块代码'],
-                'sector_name': sector['板块名称'],
-                'sector_type': 'concept'
-            })
+            sector_name = sector['板块名称']
+            if not key_concept_names or sector_name in key_concept_names:
+                storage.save_sector({
+                    'sector_id': sector['板块代码'],
+                    'sector_name': sector_name,
+                    'sector_type': 'concept'
+                })
+                saved_concept += 1
 
-        # Step 3: Update sector leaders
+        # Step 3: Update sector leaders for key sectors only
         update_placeholder.info("正在更新板块龙头股...")
         analyzer.update_all_sector_leaders()
 
-        st.success("✅ 板块数据更新完成!")
+        st.success(f"✅ 板块数据更新完成! 已保存 {saved_industry} 个行业板块, {saved_concept} 个概念板块")
 
     except Exception as e:
         st.error(f"更新失败: {str(e)}")
@@ -483,6 +506,8 @@ def _update_stocks_data(storage: StockStorage):
     from data.fetcher import DataFetcher
     from analysis.indicators import IndicatorCalculator
     from datetime import datetime, timedelta
+    import json
+    import os
 
     update_placeholder = st.empty()
     progress_placeholder = st.empty()
@@ -490,6 +515,14 @@ def _update_stocks_data(storage: StockStorage):
     try:
         fetcher = DataFetcher()
         calculator = IndicatorCalculator()
+
+        # Load config for data retention
+        config_path = os.path.join(os.path.dirname(__file__), '..', 'config', 'sectors.json')
+        years_to_keep = 7
+        if os.path.exists(config_path):
+            with open(config_path, 'r', encoding='utf-8') as f:
+                config = json.load(f)
+                years_to_keep = config.get('data_retention', {}).get('years_to_keep', 7)
 
         # Get all sectors
         update_placeholder.info("正在获取板块列表...")
@@ -499,9 +532,9 @@ def _update_stocks_data(storage: StockStorage):
             st.warning("请先更新板块数据")
             return
 
-        # Calculate date range (last 7 years for initial load)
+        # Calculate date range
         end_date = datetime.now().strftime('%Y%m%d')
-        start_date = (datetime.now() - timedelta(days=7*365)).strftime('%Y%m%d')
+        start_date = (datetime.now() - timedelta(days=years_to_keep*365)).strftime('%Y%m%d')
 
         # Thread-safe counters
         total_lock = threading.Lock()
