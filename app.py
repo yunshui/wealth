@@ -5,6 +5,8 @@ from utils.logger import Logger
 from data.database import DatabaseManager
 from data.storage import StockStorage
 from ui.layout import sidebar_layout, sector_grid, footer_right
+from datetime import datetime
+import time
 
 # Page configuration
 st.set_page_config(
@@ -26,6 +28,12 @@ if "nav_module" not in st.session_state:
 
 if "selected_sector" not in st.session_state:
     st.session_state.selected_sector = None
+
+if "last_refresh_time" not in st.session_state:
+    st.session_state.last_refresh_time = 0
+
+if "sector_data" not in st.session_state:
+    st.session_state.sector_data = {}
 
 
 def load_sectors():
@@ -50,6 +58,89 @@ def get_stock_name(storage: StockStorage, symbol: str) -> str:
     """
     stock_data = storage.get_stock(symbol)
     return stock_data.get('name', 'Unknown') if stock_data else 'Unknown'
+
+
+def fetch_sector_realtime_data(storage: StockStorage, sector_id: str):
+    """Fetch real-time data for sector leaders from akshare.
+
+    Args:
+        storage: StockStorage instance
+        sector_id: Sector ID
+
+    Returns:
+        Dictionary with symbol as key and latest data as value
+    """
+    try:
+        from data.fetcher import DataFetcher
+
+        # Get sector leaders
+        leaders = storage.get_sector_leaders(sector_id)
+        if not leaders:
+            return {}
+
+        fetcher = DataFetcher()
+        realtime_data = {}
+
+        # Fetch current date data for each leader
+        current_date = datetime.now().strftime('%Y%m%d')
+        update_time_str = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+
+        for leader in leaders:
+            symbol = leader.get('symbol', '')
+            if symbol:
+                try:
+                    # Get today's data
+                    history_df = fetcher.get_stock_history(symbol, current_date, current_date)
+
+                    if history_df is not None and not history_df.empty:
+                        latest_row = history_df.iloc[-1]
+
+                        # Get previous close from historical data - get the most recent close before today
+                        hist_df = storage.get_stock_data(symbol)
+                        prev_close = 0
+
+                        if not hist_df.empty:
+                            hist_df_sorted = hist_df.sort_values('date')
+                            # Find the last record before today
+                            for idx in range(len(hist_df_sorted) - 1, -1, -1):
+                                row = hist_df_sorted.iloc[idx]
+                                close_val = row.get('close', 0)
+                                if close_val > 0:
+                                    prev_close = close_val
+                                    break
+
+                        # Get date value and ensure it's a string with time
+                        date_value = latest_row.get('日期', '')
+                        if isinstance(date_value, datetime):
+                            date_value = date_value.strftime('%Y-%m-%d %H:%M:%S')
+                        elif hasattr(date_value, 'strftime'):
+                            date_value = date_value.strftime('%Y-%m-%d %H:%M:%S')
+                        else:
+                            date_value = update_time_str
+
+                        realtime_data[symbol] = {
+                            'symbol': symbol,
+                            'open': latest_row.get('开盘', 0),
+                            'high': latest_row.get('最高', 0),
+                            'low': latest_row.get('最低', 0),
+                            'close': latest_row.get('收盘', 0),
+                            'volume': latest_row.get('成交量', 0),
+                            'amount': latest_row.get('成交额', 0),
+                            'date': date_value,
+                            'prev_close': prev_close
+                        }
+                except Exception as e:
+                    Logger.warning(f"Failed to fetch realtime data for {symbol}: {str(e)}")
+                    continue
+
+        # Update session state
+        st.session_state.sector_data = realtime_data
+        st.session_state.last_refresh_time = time.time()
+
+        return realtime_data
+    except Exception as e:
+        Logger.error(f"Failed to fetch sector realtime data: {str(e)}")
+        return {}
 
 
 # Left sidebar with title and collapsible navigation
@@ -88,29 +179,122 @@ with content_col:
         if st.session_state.selected_sector:
             sector = st.session_state.selected_sector
             storage = StockStorage(db_manager)
+            sector_id = sector.get('sector_id', '')
 
-            # Display sector info with metrics
-            st.markdown(f"<p style='color: #000000;'><strong>当前板块:</strong> {sector['sector_name']}</p>", unsafe_allow_html=True)
+            # Header with refresh button
+            col_left, col_right = st.columns([4, 1])
+            with col_left:
+                st.markdown(f"<p style='color: #000000;'><strong>当前板块:</strong> {sector['sector_name']}</p>", unsafe_allow_html=True)
+            with col_right:
+                if st.button("🔄 刷新数据", key="refresh_sector"):
+                    st.session_state.sector_data = {}
+                    st.session_state.last_refresh_time = 0
+                    st.rerun()
+
+            # Auto-refresh every 2 minutes
+            current_time = time.time()
+            if current_time - st.session_state.last_refresh_time > 120:  # 2 minutes
+                st.session_state.sector_data = {}
+                st.session_state.last_refresh_time = 0
+                st.rerun()
 
             # Get sector leaders
-            leaders = storage.get_sector_leaders(sector.get('sector_id', ''))
+            leaders = storage.get_sector_leaders(sector_id)
             if leaders:
                 st.markdown(f"<p style='color: #000000;'><strong>龙头股数量:</strong> {len(leaders)}</p>", unsafe_allow_html=True)
                 avg_score = sum(l.get('score', 0) for l in leaders) / len(leaders)
                 st.markdown(f"<p style='color: #000000;'><strong>平均得分:</strong> {avg_score:.2f}</p>", unsafe_allow_html=True)
 
-                # Display top 5 leaders
+                # Display top 5 leaders with price and analysis
                 st.markdown("<h3 style='color: #000000;'>龙头股 Top 5</h3>", unsafe_allow_html=True)
+
                 for i, leader in enumerate(leaders[:5], 1):
                     symbol = leader.get('symbol', '')
                     name = get_stock_name(storage, symbol)
                     score = leader.get('score', 0)
                     rank = leader.get('rank', 0)
-                    st.markdown(f"<p style='color: #000000;'>{i}. {symbol} - {name} - 得分: {score:.2f} (排名: {rank})</p>", unsafe_allow_html=True)
+
+                    # Use realtime data if available
+                    realtime_data = st.session_state.sector_data.get(symbol, {})
+
+                    # Create expandable card for each stock
+                    with st.expander(f"{i}. {symbol} - {name} - 得分: {score:.2f} (排名: {rank})", expanded=True):
+                        if realtime_data:
+                            # Use realtime data
+                            close_price = realtime_data.get('close', 0)
+                            prev_close = realtime_data.get('prev_close', 0)
+
+                            # Calculate change percentage
+                            if prev_close and prev_close > 0:
+                                change_pct = (close_price - prev_close) / prev_close * 100
+                            else:
+                                change_pct = 0
+
+                            col1, col2, col3, col4 = st.columns(4)
+
+                            with col1:
+                                st.metric("最新价", f"{close_price:.2f}")
+
+                            with col2:
+                                # Use delta_color for Chinese stock market convention (red = up)
+                                delta_color = "normal" if change_pct > 0 else ("inverse" if change_pct < 0 else "off")
+                                st.metric("涨跌幅", f"{change_pct:+.2f}%", delta=None, delta_color=delta_color)
+
+                            with col3:
+                                st.metric("开盘价", f"{realtime_data.get('open', 0):.2f}")
+
+                            with col4:
+                                update_date = realtime_data.get('date', '')
+                                if isinstance(update_date, datetime):
+                                    update_date = update_date.strftime('%Y-%m-%d %H:%M:%S')
+                                st.caption(f"更新日期: {update_date}")
+
+                            # Additional price analysis
+                            st.markdown("**价位分析**")
+                            price_col1, price_col2, price_col3 = st.columns(3)
+
+                            with price_col1:
+                                st.metric("最高价", f"{realtime_data.get('high', 0):.2f}")
+
+                            with price_col2:
+                                st.metric("最低价", f"{realtime_data.get('low', 0):.2f}")
+
+                            with price_col3:
+                                volume = realtime_data.get('volume', 0)
+                                if volume > 100000000:
+                                    vol_display = f"{volume/100000000:.2f}亿"
+                                elif volume > 10000:
+                                    vol_display = f"{volume/10000:.2f}万"
+                                else:
+                                    vol_display = f"{volume}"
+                                st.metric("成交量", vol_display)
+
+                            # Amplitude analysis
+                            high_price = realtime_data.get('high', 0)
+                            low_price = realtime_data.get('low', 0)
+                            if low_price > 0:
+                                amplitude = (high_price - low_price) / low_price * 100
+                                st.markdown(f"**振幅**: {amplitude:+.2f}%")
+                        else:
+                            # Show no data indicator
+                            st.caption("暂无实时数据")
+
+                # Check if need to fetch data (do this after UI is rendered)
+                if st.session_state.last_refresh_time == 0:
+                    with st.spinner("正在获取实时数据..."):
+                        fetch_sector_realtime_data(storage, sector_id)
+                    st.rerun()
+
+                # Display last refresh time
+                if st.session_state.last_refresh_time > 0:
+                    refresh_time = datetime.fromtimestamp(st.session_state.last_refresh_time).strftime('%Y-%m-%d %H:%M:%S')
+                    st.caption(f"数据更新时间: {refresh_time} (每2分钟自动刷新)")
 
             if st.button("← 返回板块列表"):
                 st.session_state.selected_sector = None
                 st.session_state.nav_module = "home"
+                st.session_state.sector_data = {}
+                st.session_state.last_refresh_time = 0
                 st.rerun()
 
             footer_right()
