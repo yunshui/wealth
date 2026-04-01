@@ -13,10 +13,6 @@ def sidebar_layout():
     if "nav_module" not in st.session_state:
         st.session_state.nav_module = "home"
 
-    # Initialize session state for sidebar collapsed state
-    if "sidebar_collapsed" not in st.session_state:
-        st.session_state.sidebar_collapsed = False
-
     nav_modules = [
         {"id": "home", "name": "首页总览", "icon": "🏠"},
         {"id": "prediction", "name": "智能预测", "icon": "🎯"},
@@ -92,24 +88,6 @@ def sidebar_layout():
             color: #5BA3C8 !important;
         }
 
-        /* Toggle button styling */
-        .toggle-button-floating {
-            background-color: #A0D8EF !important;
-            color: #2c3e50 !important;
-            border: none;
-            padding: 8px 12px;
-            border-radius: 0 6px 6px 0;
-            cursor: pointer;
-            font-size: 16px;
-            font-weight: 600;
-            transition: all 0.2s ease;
-            z-index: 10000;
-            box-shadow: 2px 0 8px rgba(160, 216, 239, 0.3);
-        }
-        .toggle-button-floating:hover {
-            background-color: #8FD4E8 !important;
-        }
-
         /* Override Streamlit's default button styling in sidebar */
         [data-testid="stSidebar"] .stButton button,
         [data-testid="column"] .stButton button {
@@ -141,9 +119,7 @@ def sidebar_layout():
     """, unsafe_allow_html=True)
 
     # Create left sidebar, divider, and right content
-    sidebar_width = 1 if not st.session_state.sidebar_collapsed else 0.2
-    divider_width = 0.05
-    cols = st.columns([sidebar_width, divider_width, 4])
+    cols = st.columns([1, 0.05, 4])
 
     with cols[0]:  # Left sidebar
         # System title at top of sidebar
@@ -154,96 +130,27 @@ def sidebar_layout():
         """, unsafe_allow_html=True)
 
         # Navigation buttons
-        if not st.session_state.sidebar_collapsed:
-            for module in nav_modules:
-                is_active = st.session_state.nav_module == module["id"]
-                btn_style = "nav-btn active" if is_active else "nav-btn"
+        for module in nav_modules:
+            is_active = st.session_state.nav_module == module["id"]
+            btn_style = "nav-btn active" if is_active else "nav-btn"
 
-                if is_active:
-                    st.markdown(f"""
-                        <div class="{btn_style}">
-                            <strong>{module['icon']} {module['name']}</strong>
-                        </div>
-                    """, unsafe_allow_html=True)
-                else:
-                    if st.button(f"{module['icon']} {module['name']}", key=f"nav_{module['id']}", use_container_width=True):
-                        st.session_state.nav_module = module["id"]
-                        st.rerun()
+            if is_active:
+                st.markdown(f"""
+                    <div class="{btn_style}">
+                        <strong>{module['icon']} {module['name']}</strong>
+                    </div>
+                """, unsafe_allow_html=True)
+            else:
+                if st.button(f"{module['icon']} {module['name']}", key=f"nav_{module['id']}", use_container_width=True):
+                    st.session_state.nav_module = module["id"]
+                    st.rerun()
 
-            st.markdown("---")
-            st.caption("基于7年A股历史数据预测")
-        else:
-            # Collapsed state - show icons only
-            for module in nav_modules:
-                is_active = st.session_state.nav_module == module["id"]
-                btn_style = "nav-btn active" if is_active else "nav-btn"
+        st.markdown("---")
+        st.caption("基于7年A股历史数据预测")
 
-                if is_active:
-                    st.markdown(f"""
-                        <div class="{btn_style}" style="text-align: center; padding: 8px;">
-                            <strong>{module['icon']}</strong>
-                        </div>
-                    """, unsafe_allow_html=True)
-                else:
-                    if st.button(module['icon'], key=f"nav_{module['id']}", use_container_width=True):
-                        st.session_state.nav_module = module["id"]
-                        st.rerun()
-
-    with cols[1]:  # Divider with toggle button
-        # Custom CSS for toggle button on left edge
-        st.markdown("""
-            <style>
-            /* Toggle button positioned on left edge */
-            .toggle-button-floating {
-                position: fixed;
-                left: 0;
-                top: 50%;
-                transform: translateY(-50%);
-                background-color: #A0D8EF;
-                color: #2c3e50;
-                border: none;
-                padding: 8px 12px;
-                border-radius: 0 6px 6px 0;
-                cursor: pointer;
-                font-size: 16px;
-                font-weight: 600;
-                transition: all 0.2s ease;
-                z-index: 10000;
-                box-shadow: 2px 0 8px rgba(160, 216, 239, 0.3);
-            }
-            .toggle-button-floating:hover {
-                background-color: #8FD4E8;
-            }
-
-            /* Vertical line */
-            .v-divider {
-                position: absolute;
-                width: 2px;
-                height: 100vh;
-                background-color: #D0E8F5;
-                left: 50%;
-                top: 0;
-                transform: translateX(-50%);
-                z-index: 0;
-            }
-            </style>
-        """, unsafe_allow_html=True)
-
+    with cols[1]:  # Divider line only
         # Vertical line
-        st.markdown("<div class='v-divider'></div>", unsafe_allow_html=True)
-
-        # Hidden button to handle toggle (the visible one is positioned via CSS)
-        toggle_text = "<<" if not st.session_state.sidebar_collapsed else ">>"
-        st.markdown(f"""
-            <button class='toggle-button-floating' onclick="
-                const btn = document.querySelector('button[key=\"toggle_sidebar\"]');
-                if (btn) btn.click();
-            ">{toggle_text}</button>
-        """, unsafe_allow_html=True)
-
-        if st.button(toggle_text, key="toggle_sidebar"):
-            st.session_state.sidebar_collapsed = not st.session_state.sidebar_collapsed
-            st.rerun()
+        st.markdown("<div style='width: 2px; height: 100vh; background-color: #D0E8F5; margin: 0 auto;'></div>", unsafe_allow_html=True)
 
     return cols[2]  # Return right content column
 
