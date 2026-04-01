@@ -24,14 +24,14 @@ def sidebar_layout():
     # Add custom CSS for sidebar styling - 淡蓝色配色
     st.markdown("""
         <style>
-        /* Global background - 白色 */
+        /* Global background - 浅灰蓝色 */
         .stApp {
-            background-color: #ffffff !important;
+            background-color: #F7F8F9 !important;
         }
 
         /* Main content background */
         [data-testid="stMainBlockContainer"] {
-            background-color: #ffffff !important;
+            background-color: #F7F8F9 !important;
         }
 
         /* Sidebar container styling */
@@ -217,9 +217,9 @@ def sector_grid(sectors: list, storage=None, on_sector_click=None):
 
         /* Sector button styling */
         .stButton > button {
-            background-color: #A0D8EF;
+            background-color: #E6F7FF;
             color: #2c3e50;
-            border: none;
+            border: 1px solid #D0E8F5;
             padding: 16px 20px;
             border-radius: 6px;
             font-weight: 600;
@@ -228,8 +228,9 @@ def sector_grid(sectors: list, storage=None, on_sector_click=None):
             box-shadow: 0 2px 8px rgba(160, 216, 239, 0.2);
         }
         .stButton > button:hover {
-            background-color: #8FD4E8;
+            background-color: #A1ADB3;
             box-shadow: 0 2px 8px rgba(160, 216, 239, 0.4);
+            border-color: #8FBEDD;
         }
         </style>
     """, unsafe_allow_html=True)
