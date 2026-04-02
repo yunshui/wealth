@@ -300,7 +300,7 @@ def footer_right():
     """Display footer at right side bottom."""
     st.markdown("""
         <div style='text-align: center; padding: 20px 0; margin-top: 30px;'>
-            <p style='margin: 0; color: #666; font-size: 14px;'>人机协同A股智能投资决策系统 v0.4.0 | 预测仅供参考，投资风险自担</p>
+            <p style='margin: 0; color: #666; font-size: 14px;'>人机协同A股智能投资决策系统 v0.4.0 🔄 | 预测仅供参考，投资风险自担</p>
         </div>
     """, unsafe_allow_html=True)
 

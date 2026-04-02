@@ -191,13 +191,6 @@ with content_col:
                     st.session_state.last_refresh_time = 0
                     st.rerun()
 
-            # Auto-refresh every 2 minutes
-            current_time = time.time()
-            if current_time - st.session_state.last_refresh_time > 120:  # 2 minutes
-                st.session_state.sector_data = {}
-                st.session_state.last_refresh_time = 0
-                st.rerun()
-
             # Get sector leaders
             leaders = storage.get_sector_leaders(sector_id)
             if leaders:
@@ -283,12 +276,15 @@ with content_col:
                 if st.session_state.last_refresh_time == 0:
                     with st.spinner("正在获取实时数据..."):
                         fetch_sector_realtime_data(storage, sector_id)
+                    # Always set refresh time to prevent infinite loops
+                    if st.session_state.last_refresh_time == 0:
+                        st.session_state.last_refresh_time = time.time()
                     st.rerun()
 
                 # Display last refresh time
                 if st.session_state.last_refresh_time > 0:
                     refresh_time = datetime.fromtimestamp(st.session_state.last_refresh_time).strftime('%Y-%m-%d %H:%M:%S')
-                    st.caption(f"数据更新时间: {refresh_time} (每2分钟自动刷新)")
+                    st.caption(f"数据更新时间: {refresh_time}")
 
             if st.button("← 返回板块列表"):
                 st.session_state.selected_sector = None
