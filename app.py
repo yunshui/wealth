@@ -81,52 +81,34 @@ def fetch_sector_realtime_data(storage: StockStorage, sector_id: str):
         fetcher = DataFetcher()
         realtime_data = {}
 
-        # Fetch current date data for each leader
-        current_date = datetime.now().strftime('%Y%m%d')
         update_time_str = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
 
         for leader in leaders:
             symbol = leader.get('symbol', '')
             if symbol:
                 try:
-                    # Get today's data
-                    history_df = fetcher.get_stock_history(symbol, current_date, current_date)
+                    # Get latest/real-time data using spot API
+                    latest_info = fetcher.get_stock_latest(symbol)
 
-                    if history_df is not None and not history_df.empty:
-                        latest_row = history_df.iloc[-1]
-
-                        # Get previous close from historical data - get the most recent close before today
-                        hist_df = storage.get_stock_data(symbol)
-                        prev_close = 0
-
-                        if not hist_df.empty:
-                            hist_df_sorted = hist_df.sort_values('date')
-                            # Find the last record before today
-                            for idx in range(len(hist_df_sorted) - 1, -1, -1):
-                                row = hist_df_sorted.iloc[idx]
-                                close_val = row.get('close', 0)
-                                if close_val > 0:
-                                    prev_close = close_val
-                                    break
-
-                        # Get date value and ensure it's a string with time
-                        date_value = latest_row.get('日期', '')
-                        if isinstance(date_value, datetime):
-                            date_value = date_value.strftime('%Y-%m-%d %H:%M:%S')
-                        elif hasattr(date_value, 'strftime'):
-                            date_value = date_value.strftime('%Y-%m-%d %H:%M:%S')
-                        else:
-                            date_value = update_time_str
+                    if latest_info:
+                        # Extract data from latest info
+                        open_price = float(latest_info.get('今开', 0))
+                        high_price = float(latest_info.get('最高', 0))
+                        low_price = float(latest_info.get('最低', 0))
+                        close_price = float(latest_info.get('最新价', 0))
+                        prev_close = float(latest_info.get('昨收', 0))
+                        volume = float(latest_info.get('成交量', 0))
+                        amount = float(latest_info.get('成交额', 0))
 
                         realtime_data[symbol] = {
                             'symbol': symbol,
-                            'open': latest_row.get('开盘', 0),
-                            'high': latest_row.get('最高', 0),
-                            'low': latest_row.get('最低', 0),
-                            'close': latest_row.get('收盘', 0),
-                            'volume': latest_row.get('成交量', 0),
-                            'amount': latest_row.get('成交额', 0),
-                            'date': date_value,
+                            'open': open_price,
+                            'high': high_price,
+                            'low': low_price,
+                            'close': close_price,
+                            'volume': volume,
+                            'amount': amount,
+                            'date': update_time_str,
                             'prev_close': prev_close
                         }
                 except Exception as e:
