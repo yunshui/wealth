@@ -173,6 +173,13 @@ with content_col:
                     st.session_state.last_refresh_time = 0
                     st.rerun()
 
+            # Auto-refresh every 5 minutes
+            current_time = time.time()
+            if st.session_state.last_refresh_time > 0 and current_time - st.session_state.last_refresh_time > 300:  # 5 minutes
+                st.session_state.sector_data = {}
+                st.session_state.last_refresh_time = 0
+                st.rerun()
+
             # Get sector leaders
             leaders = storage.get_sector_leaders(sector_id)
             if leaders:
@@ -266,7 +273,7 @@ with content_col:
                 # Display last refresh time
                 if st.session_state.last_refresh_time > 0:
                     refresh_time = datetime.fromtimestamp(st.session_state.last_refresh_time).strftime('%Y-%m-%d %H:%M:%S')
-                    st.caption(f"数据更新时间: {refresh_time}")
+                    st.caption(f"数据更新时间: {refresh_time} (每5分钟自动刷新)")
 
             if st.button("← 返回板块列表"):
                 st.session_state.selected_sector = None
