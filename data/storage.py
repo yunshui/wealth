@@ -3,6 +3,8 @@
 import pandas as pd
 from datetime import datetime
 from typing import Dict, List, Optional
+import json
+import os
 from utils.logger import Logger
 from utils.exceptions import StorageException
 from data.database import DatabaseManager
@@ -72,6 +74,78 @@ class StockStorage:
         except Exception as e:
             Logger.error(f"Failed to get sectors: {str(e)}")
             raise StorageException(f"Failed to get sectors: {str(e)}")
+
+    def get_major_sectors(self, config_path: str = 'config/MAJOR_SECTORS.json') -> List[Dict]:
+        """Get predefined major sectors from config file.
+
+        Args:
+            config_path: Path to major sectors config file
+
+        Returns:
+            List of sector dictionaries
+        """
+        try:
+            # Load config file
+            if not os.path.exists(config_path):
+                Logger.warning(f"Major sectors config file not found at {config_path}, falling back to all sectors")
+                return self.get_all_sectors()
+
+            with open(config_path, 'r', encoding='utf-8') as f:
+                config = json.load(f)
+
+            industry_sectors = config.get('industry', [])
+            concept_sectors = config.get('concept', [])
+
+            # Build sector type map
+            sector_type_map = {}
+            for name in industry_sectors:
+                sector_type_map[name] = 'industry'
+            for name in concept_sectors:
+                sector_type_map[name] = 'concept'
+
+            # Query matching sectors from database
+            conn = self.db.get_connection()
+            cursor = conn.cursor()
+
+            # Build placeholders for SQL query
+            all_sector_names = list(sector_type_map.keys())
+            if not all_sector_names:
+                return []
+
+            placeholders = ', '.join(['?' for _ in all_sector_names])
+            query = f'''
+                SELECT sector_id, sector_name, sector_type, leader_count
+                FROM sectors WHERE sector_name IN ({placeholders})
+                ORDER BY sector_name
+            '''
+            cursor.execute(query, all_sector_names)
+            rows = cursor.fetchall()
+
+            # Return matching sectors (without type filtering)
+            major_sectors = []
+            for row in rows:
+                sector_name = row['sector_name']
+                major_sectors.append({
+                    'sector_id': row['sector_id'],
+                    'sector_name': row['sector_name'],
+                    'sector_type': row['sector_type'],
+                    'leader_count': row['leader_count']
+                })
+
+            # Log missing sectors
+            found_names = {s['sector_name'] for s in major_sectors}
+            for name in all_sector_names:
+                if name not in found_names:
+                    Logger.debug(f"Major sector '{name}' not found in database")
+
+            Logger.info(f"Retrieved {len(major_sectors)}/{len(all_sector_names)} major sectors")
+            return major_sectors
+
+        except Exception as e:
+            Logger.error(f"Failed to get major sectors: {str(e)}")
+            # Fallback to all sectors on error
+            Logger.info("Falling back to all sectors")
+            return self.get_all_sectors()
 
     def get_sector(self, sector_id: str) -> Optional[Dict]:
         """Get sector by ID."""

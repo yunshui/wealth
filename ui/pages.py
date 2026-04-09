@@ -55,7 +55,7 @@ def show_homepage():
 
     try:
         # Sector selection
-        sectors = storage.get_all_sectors()
+        sectors = storage.get_major_sectors()
         if not sectors:
             st.warning("暂无板块数据，请先在'数据更新'页面更新板块数据")
             return
@@ -434,6 +434,8 @@ def _update_sectors_data(storage: StockStorage):
     from data.fetcher import DataFetcher
     from analysis.indicators import IndicatorCalculator
     from analysis.sector import SectorAnalyzer
+    import json
+    import os
 
     update_placeholder = st.empty()
 
@@ -441,32 +443,96 @@ def _update_sectors_data(storage: StockStorage):
         fetcher = DataFetcher()
         analyzer = SectorAnalyzer(storage)
 
-        # Step 1: Get sectors from API
+        # Load major sectors config
+        config_path = 'config/MAJOR_SECTORS.json'
+        if os.path.exists(config_path):
+            with open(config_path, 'r', encoding='utf-8') as f:
+                config = json.load(f)
+            target_industries = set(config.get('industry', []))
+            target_concepts = set(config.get('concept', []))
+            update_placeholder.info(f"正在更新配置文件中的 {len(target_industries) + len(target_concepts)} 个主要板块...")
+        else:
+            update_placeholder.warning("配置文件不存在，将更新所有板块")
+            target_industries = None
+            target_concepts = None
+
+        # Step 1: Clean up old sectors from database (if using config)
+        if target_industries is not None and target_concepts is not None:
+            update_placeholder.info("正在清理旧板块数据...")
+            all_sectors = storage.get_all_sectors()
+
+            # Get connection once and reuse it
+            conn = storage.db.get_connection()
+            cursor = conn.cursor()
+
+            sectors_to_delete = []
+            for sector in all_sectors:
+                sector_name = sector['sector_name']
+                sector_type = sector['sector_type']
+                # Check if sector should be kept
+                keep = False
+                if sector_type == 'industry' and sector_name in target_industries:
+                    keep = True
+                elif sector_type == 'concept' and sector_name in target_concepts:
+                    keep = True
+
+                if not keep:
+                    sectors_to_delete.append(sector['sector_id'])
+
+            # Delete in batches with progress updates
+            batch_size = 100
+            deleted_count = 0
+            total_to_delete = len(sectors_to_delete)
+
+            for i in range(0, len(sectors_to_delete), batch_size):
+                batch = sectors_to_delete[i:i + batch_size]
+
+                # Delete sector leaders for batch
+                placeholders = ', '.join(['?' for _ in batch])
+                cursor.execute(f'DELETE FROM sector_leaders WHERE sector_id IN ({placeholders})', batch)
+
+                # Delete sectors
+                cursor.execute(f'DELETE FROM sectors WHERE sector_id IN ({placeholders})', batch)
+                conn.commit()
+
+                deleted_count = min(i + batch_size, total_to_delete)
+                update_placeholder.info(f"正在清理旧板块数据... ({deleted_count}/{total_to_delete})")
+
+            if total_to_delete > 0:
+                update_placeholder.info(f"✅ 已清理 {total_to_delete} 个旧板块")
+
+        # Step 2: Get sectors from API
         update_placeholder.info("正在获取板块列表...")
         industry_sectors = fetcher.get_industry_sectors()
         concept_sectors = fetcher.get_concept_sectors()
 
-        # Step 2: Save all sectors to database
+        # Step 3: Save only major sectors to database
         update_placeholder.info("正在保存板块数据...")
 
         saved_count = 0
         for _, sector in industry_sectors.iterrows():
-            storage.save_sector({
-                'sector_id': sector['板块代码'],
-                'sector_name': sector['板块名称'],
-                'sector_type': 'industry'
-            })
-            saved_count += 1
+            sector_name = sector['板块名称']
+            # Filter by config if available
+            if target_industries is None or sector_name in target_industries:
+                storage.save_sector({
+                    'sector_id': sector['板块代码'],
+                    'sector_name': sector_name,
+                    'sector_type': 'industry'
+                })
+                saved_count += 1
 
         for _, sector in concept_sectors.iterrows():
-            storage.save_sector({
-                'sector_id': sector['板块代码'],
-                'sector_name': sector['板块名称'],
-                'sector_type': 'concept'
-            })
-            saved_count += 1
+            sector_name = sector['板块名称']
+            # Filter by config if available
+            if target_concepts is None or sector_name in target_concepts:
+                storage.save_sector({
+                    'sector_id': sector['板块代码'],
+                    'sector_name': sector_name,
+                    'sector_type': 'concept'
+                })
+                saved_count += 1
 
-        # Step 3: Update sector leaders
+        # Step 4: Update sector leaders
         update_placeholder.info("正在更新板块龙头股...")
         analyzer.update_all_sector_leaders()
 

@@ -37,13 +37,13 @@ if "sector_data" not in st.session_state:
 
 
 def load_sectors():
-    """Load sectors from database.
+    """Load major sectors from database.
 
     Returns:
         List of sector dictionaries
     """
     storage = StockStorage(db_manager)
-    return storage.get_all_sectors()
+    return storage.get_major_sectors()
 
 
 def get_stock_name(storage: StockStorage, symbol: str) -> str:
