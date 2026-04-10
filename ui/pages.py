@@ -586,7 +586,7 @@ def _update_stocks_data(storage: StockStorage):
         # Thread-safe counters
         total_lock = threading.Lock()
         processed_stocks = 0
-        skipped_stocks = 0
+        failed_stocks = 0  # Changed from skipped_stocks
         total_sectors = len(sectors_config)
 
         # Progress tracking
@@ -604,7 +604,7 @@ def _update_stocks_data(storage: StockStorage):
                 thread_id: Thread identifier
 
             Returns:
-                Tuple of (success, symbol)
+                Tuple of (success, symbol, reason) - Added reason for debugging
             """
             # Use a separate storage instance for each thread
             db = DatabaseManager()
@@ -614,7 +614,7 @@ def _update_stocks_data(storage: StockStorage):
 
             symbol = stock_dict.get('symbol', '')
             if not symbol:
-                return (False, symbol)
+                return (False, symbol, 'Empty symbol')
 
             try:
                 # Check if stock info needs update (missing name)
@@ -638,7 +638,7 @@ def _update_stocks_data(storage: StockStorage):
                     history_df = thread_fetcher.get_stock_history(symbol, start_date, end_date)
 
                     if history_df is None or history_df.empty:
-                        return (False, symbol)
+                        return (False, symbol, 'No history data')
 
                     # Calculate indicators
                     history_df = thread_calculator.calculate_all(history_df)
@@ -677,10 +677,10 @@ def _update_stocks_data(storage: StockStorage):
                         }
                         thread_storage.save_stock(stock_data)
 
-                return (True, symbol)
+                return (True, symbol, '')
 
             except Exception as e:
-                return (False, symbol)
+                return (False, symbol, str(e))
             finally:
                 db.close()
 
@@ -698,7 +698,7 @@ def _update_stocks_data(storage: StockStorage):
             sector_name = sector_config['sector_name']
             sector_type = sector_config['sector_type']
             processed_count = 0
-            skipped_count = 0
+            failed_count = 0  # Changed from skipped_count
 
             try:
                 # Get stocks in this sector
@@ -731,19 +731,22 @@ def _update_stocks_data(storage: StockStorage):
                     }
 
                     for future in as_completed(futures):
-                        success, symbol = future.result()
-                        if success:
-                            processed_count += 1
-                        else:
-                            skipped_count += 1
+                        try:
+                            success, symbol, reason = future.result()
+                            if success:
+                                processed_count += 1
+                            else:
+                                failed_count += 1
+                        except Exception:
+                            failed_count += 1
 
                         # Update progress
                         with total_lock:
-                            total = processed_stocks + skipped_count + processed_count + skipped_count
+                            total = processed_stocks + failed_stocks + processed_count + failed_count
                             # Update local tracking
                             pass
 
-                return (processed_count, skipped_count)
+                return (processed_count, failed_count)
 
             except Exception as e:
                 return (0, 0)
@@ -761,19 +764,26 @@ def _update_stocks_data(storage: StockStorage):
             # Process completed tasks and update progress
             for future in as_completed(futures):
                 try:
-                    processed, skipped = future.result()
+                    processed, failed = future.result()
                     with total_lock:
                         processed_stocks += processed
-                        skipped_stocks += skipped
+                        failed_stocks += failed
                     # Update progress display
                     progress_placeholder.info(
                         f"进度: {sectors_processed}/{total_sectors} 板块 | "
-                        f"已处理: {processed_stocks} 只 | 跳过: {skipped_stocks} 只"
+                        f"已处理: {processed_stocks} 只 | 失败: {failed_stocks} 只"
                     )
                 except Exception as e:
                     pass
 
-        st.success(f"✅ 股票数据更新完成! 已处理 {processed_stocks} 只股票, 跳过 {skipped_stocks} 只")
+        # Display summary
+        if processed_stocks > 0:
+            st.success(f"✅ 股票数据更新完成! 已处理 {processed_stocks} 只股票, 失败 {failed_stocks} 只")
+        elif failed_stocks > 0:
+            st.warning(f"⚠️ 股票数据更新完成! 已处理 {processed_stocks} 只股票, 失败 {failed_stocks} 只")
+            st.info("💡 失败原因可能是 akshare API 连接问题，请稍后重试")
+        else:
+            st.warning("⚠️ 没有股票被处理，请检查 akshare API 连接")
 
     except Exception as e:
         st.error(f"更新失败: {str(e)}")
