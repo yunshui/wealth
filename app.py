@@ -82,6 +82,8 @@ def fetch_sector_realtime_data(storage: StockStorage, sector_id: str):
         # Get sector leaders
         leaders = storage.get_sector_leaders(sector_id)
         if not leaders:
+            Logger.warning(f"No leaders found for sector {sector_id}")
+            # Return empty data but also log this
             return {}
 
         fetcher = DataFetcher()
@@ -198,7 +200,21 @@ with content_col:
 
             # Get sector leaders
             leaders = storage.get_sector_leaders(sector_id)
-            if leaders:
+
+            # Check if need to fetch data (do this before UI is rendered)
+            if st.session_state.last_refresh_time == 0:
+                with st.spinner("正在获取实时数据..."):
+                    fetch_sector_realtime_data(storage, sector_id)
+                # Always set refresh time to prevent infinite loops
+                if st.session_state.last_refresh_time == 0:
+                    st.session_state.last_refresh_time = time.time()
+                st.rerun()
+
+            # Display message if no leaders
+            if not leaders:
+                st.warning(f"⚠️ 该板块暂无龙头股数据")
+                st.info("💡 请先在「数据更新」页面点击「更新板块数据」获取龙头股")
+            else:
                 st.markdown(f"<p style='color: #000000;'><strong>龙头股数量:</strong> {len(leaders)}</p>", unsafe_allow_html=True)
                 avg_score = sum(l.get('score', 0) for l in leaders) / len(leaders)
                 st.markdown(f"<p style='color: #000000;'><strong>平均得分:</strong> {avg_score:.2f}</p>", unsafe_allow_html=True)
@@ -289,19 +305,10 @@ with content_col:
                                 st.session_state.nav_module = "stock_detail"
                                 st.rerun()
 
-                # Check if need to fetch data (do this after UI is rendered)
-                if st.session_state.last_refresh_time == 0:
-                    with st.spinner("正在获取实时数据..."):
-                        fetch_sector_realtime_data(storage, sector_id)
-                    # Always set refresh time to prevent infinite loops
-                    if st.session_state.last_refresh_time == 0:
-                        st.session_state.last_refresh_time = time.time()
-                    st.rerun()
-
-                # Display last refresh time
-                if st.session_state.last_refresh_time > 0:
-                    refresh_time = datetime.fromtimestamp(st.session_state.last_refresh_time).strftime('%Y-%m-%d %H:%M:%S')
-                    st.caption(f"数据更新时间: {refresh_time} (每5分钟自动刷新)")
+            # Display last refresh time
+            if st.session_state.last_refresh_time > 0:
+                refresh_time = datetime.fromtimestamp(st.session_state.last_refresh_time).strftime('%Y-%m-%d %H:%M:%S')
+                st.caption(f"数据更新时间: {refresh_time} (每5分钟自动刷新)")
 
             if st.button("← 返回板块列表"):
                 st.session_state.selected_sector = None
