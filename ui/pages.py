@@ -410,7 +410,7 @@ def show_data_update():
             return
 
         # Update buttons
-        col1, col2, col3 = st.columns(3)
+        col1, col2, col3, col4 = st.columns(4)
 
         with col1:
             if st.button("🔄 更新板块数据", use_container_width=True, key="update_sectors"):
@@ -423,6 +423,10 @@ def show_data_update():
         with col3:
             if st.button("🔄 更新技术指标", use_container_width=True, key="update_indicators"):
                 _update_indicators_data(storage)
+
+        with col4:
+            if st.button("🧠 训练预测模型", use_container_width=True, key="train_models"):
+                _train_models(storage)
     finally:
         # Close database connection
         if db_manager:
@@ -863,6 +867,144 @@ def _update_indicators_data(storage: StockStorage):
 
     except Exception as e:
         st.error(f"更新失败: {str(e)}")
+
+
+def _train_models(storage: StockStorage):
+    """Train all prediction models using available historical data.
+
+    Args:
+        storage: StockStorage instance for fetching training data
+    """
+    from prediction.trainer import ModelTrainer
+    from datetime import datetime
+    import json
+    import os
+    import pandas as pd
+
+    # Check available stocks
+    stocks = storage.get_stock_list()
+
+    if not stocks:
+        st.error("❌ 数据库中没有股票数据，请先更新板块数据")
+        return
+
+    # Check data availability - sample a few stocks
+    total_stocks = len(stocks)
+    st.info(f"📊 检测到 {total_stocks} 只股票，检查历史数据...")
+
+    # Sample check: test first 5 stocks
+    sample_stocks = stocks[:min(5, len(stocks))]
+    data_available = False
+    max_data_length = 0
+
+    for stock in sample_stocks:
+        try:
+            df = storage.get_stock_data(stock['symbol'])
+            if not df.empty:
+                data_available = True
+                max_data_length = max(max_data_length, len(df))
+        except Exception:
+            pass
+
+    if not data_available:
+        st.error("❌ 数据库中没有历史交易数据")
+        st.markdown("""
+        **请按以下步骤操作：**
+
+        1. 点击 **"🔄 更新板块数据"** 获取板块列表
+        2. 点击 **"🔄 更新股票数据"** 获取历史交易数据（首次可能需要较长时间）
+        3. 等待数据更新完成后，再点击 **"🧠 训练预测模型"**
+
+        **注意：** 首次更新股票数据需要从 akshare API 获取约7年的历史数据，
+        涉及5000多只股票，可能需要30分钟到1小时，请耐心等待。
+        """)
+        return
+
+    st.info(f"✅ 历史数据检查通过，样本股票最多有 {max_data_length} 条记录")
+
+    # Create model directory
+    model_dir = 'models'
+    os.makedirs(model_dir, exist_ok=True)
+
+    # Initialize trainer
+    try:
+        trainer = ModelTrainer(storage, model_dir)
+    except Exception as e:
+        st.error(f"❌ 初始化训练器失败: {str(e)}")
+        return
+
+    # Training progress
+    progress_placeholder = st.empty()
+    log_placeholder = st.empty()
+
+    # Train each model
+    model_names = {
+        'short': '短期预测模型',
+        'medium': '中期预测模型',
+        'long': '长期预测模型'
+    }
+
+    results = {}
+
+    for horizon, name in model_names.items():
+        progress_placeholder.info(f"⏳ 正在训练 {name}...")
+        log_placeholder.empty()
+
+        try:
+            # Get available stocks for this horizon
+            symbols = [s['symbol'] for s in stocks]
+
+            # Train model
+            if horizon == 'short':
+                metrics = trainer.train_short_term_model(symbols)
+            elif horizon == 'medium':
+                metrics = trainer.train_medium_term_model(symbols)
+            else:
+                metrics = trainer.train_long_term_model(symbols)
+
+            results[horizon] = metrics
+
+            # Display result
+            if 'error' in metrics:
+                st.warning(f"⚠️ {name} 训练失败: {metrics['error']}")
+                log_placeholder.info(
+                    f"💡 可能原因：\n"
+                    f"  • 数据不足（短期需要至少25天，中期需要至少180天，长期需要至少372天）\n"
+                    f"  • 没有足够的买/卖信号样本（阈值3%）\n"
+                    f"  • 请先点击「🔄 更新股票数据」获取足够的历史数据"
+                )
+            else:
+                accuracy = metrics.get('accuracy', 0)
+                samples = metrics.get('samples', 0)
+                st.success(f"✅ {name} 训练完成! 准确率: {accuracy*100:.1f}%, 样本数: {samples}")
+
+        except Exception as e:
+            st.error(f"❌ {name} 训练失败: {str(e)}")
+            results[horizon] = {'error': str(e)}
+
+    # Save model info
+    model_info = {}
+    for horizon, name in model_names.items():
+        if horizon in results and 'error' not in results[horizon]:
+            model_info[name] = {
+                'accuracy': results[horizon].get('accuracy', 0),
+                'samples': results[horizon].get('samples', 0),
+                'train_date': datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+            }
+
+    if model_info:
+        model_info_file = os.path.join(model_dir, 'model_info.json')
+        with open(model_info_file, 'w') as f:
+            json.dump(model_info, f, indent=2)
+
+    # Summary
+    st.markdown("---")
+
+    if model_info:
+        st.success("🎉 所有模型训练完成!")
+        st.info("💡 现在可以在股票详情页查看预测结果")
+    else:
+        st.warning("⚠️ 所有模型训练失败，请检查历史数据是否充足")
 
 
 def show_history():
