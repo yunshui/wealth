@@ -152,7 +152,12 @@ with content_col:
 
     elif nav_module == "prediction":
         st.markdown("<h2 style='color: #2c3e50; margin: 0;'>🎯 智能预测</h2>", unsafe_allow_html=True)
-        st.info("智能预测功能将在后续版本实现")
+        st.info("💡 请从「首页总览」选择板块，然后点击龙头股查看预测")
+        footer_right()
+
+    elif nav_module == "stock_detail":
+        from ui.pages import show_stock_detail
+        show_stock_detail()
         footer_right()
 
     elif nav_module == "analysis":
@@ -257,9 +262,21 @@ with content_col:
                             if low_price > 0:
                                 amplitude = (high_price - low_price) / low_price * 100
                                 st.markdown(f"**振幅**: {amplitude:+.2f}%")
+
+                            # Add button to view stock detail with prediction
+                            if st.button(f"📊 查看 {symbol} 详情和预测", key=f"view_detail_{symbol}"):
+                                st.session_state.selected_symbol = symbol
+                                st.session_state.nav_module = "stock_detail"
+                                st.rerun()
                         else:
                             # Show no data indicator
                             st.caption("暂无实时数据")
+
+                            # Add button to view stock detail (even without realtime data)
+                            if st.button(f"📊 查看 {symbol} 详情和预测", key=f"view_detail_no_data_{symbol}"):
+                                st.session_state.selected_symbol = symbol
+                                st.session_state.nav_module = "stock_detail"
+                                st.rerun()
 
                 # Check if need to fetch data (do this after UI is rendered)
                 if st.session_state.last_refresh_time == 0:

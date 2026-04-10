@@ -166,8 +166,12 @@ def show_stock_detail():
     st.header("📊 股票详情")
 
     # Back button
-    if st.button("← 返回板块总览", key="back_to_home"):
-        st.session_state.page = "首页/板块总览"
+    if st.button("← 返回", key="back_to_home"):
+        # Return to where we came from (sector analysis or home)
+        if st.session_state.selected_sector:
+            st.session_state.nav_module = "analysis"
+        else:
+            st.session_state.nav_module = "home"
         st.rerun()
 
     # Symbol input (or use session state from homepage)
