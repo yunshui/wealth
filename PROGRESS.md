@@ -2,6 +2,33 @@
 
 ## 项目进度记录
 
+### 2026-04-10 - 备用数据源实现 ✅
+
+**已完成**:
+1. **baostock 集成** - `data/fetcher.py`
+   - 添加 baostock 作为备用数据源
+   - akshare API 失败时自动切换到 baostock
+   - 数据格式转换以匹配 akshare 格式
+   - 自动清理 baostock 连接
+
+2. **刷新按钮修复** - `app.py`
+   - 修复板块分析页面刷新按钮无响应问题
+   - 使用 session state flag 而非直接 rerun
+   - 改进自动刷新逻辑
+
+**效果**:
+- ✅ 解决 akshare API 连接失败问题
+- ✅ 数据更新功能现在可以正常工作
+- ✅ 刷新按钮现在可以正常工作
+
+**Commits**:
+- b89b746: feat: add baostock as backup data source
+- aa41321: fix: refresh button not working in sector analysis page
+
+**当前状态**: Stage 1-6 全部完成 ✅
+
+---
+
 ### 2026-04-10 - 股票更新错误提示改进 ✅
 
 **已完成**:
