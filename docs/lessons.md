@@ -679,6 +679,89 @@ cursor.execute('''
 - 使用事务来确保数据的一致性
 - 定期检查和清理重复数据
 
+## 20. Streamlit 进度显示最佳实践
+
+### 问题
+进度显示不够明显，用户体验差：
+- 使用大标题和分隔线占用空间
+- 使用 markdown 格式不够醒目
+- 无法清晰看到当前处理状态
+
+### 解决方案
+```python
+# ✅ 推荐做法
+def _update_stocks_data(storage: StockStorage):
+    # 创建进度显示占位符
+    progress_bar = st.progress(0)
+    current_status = st.empty()
+    completed_info = st.empty()
+    remaining_info = st.empty()
+
+    try:
+        # 更新进度条
+        progress = sectors_processed / total_sectors
+        progress_bar.progress(progress)
+
+        # 更新状态信息（使用 st.info 而不是 markdown）
+        current_status.info(f"进度: {sectors_processed}/{total_sectors} 板块 | 已处理: {processed_stocks} 只 | 失败: {failed_stocks} 只")
+        completed_info.info(f"最新完成: {sector_name} (已处理: {processed} 只, 失败: {failed} 只)")
+        remaining_info.info(f"待处理: {', '.join(remaining)}...")
+
+    finally:
+        # 完成后清除占位符
+        progress_bar.empty()
+        current_status.empty()
+        completed_info.empty()
+        remaining_info.empty()
+```
+
+### ❌ 不推荐做法
+```python
+# 不要使用大标题和分隔线
+st.markdown("---")
+st.markdown("### 📊 股票数据更新进度")
+
+# 不要使用 markdown 显示状态
+st.markdown(f"**进度**: {sectors_processed}/{total_sectors} 板块")
+```
+
+### Do's（推荐）
+- ✅ 使用 `st.progress()` 显示视觉进度条 - 更明显直观
+- ✅ 使用 `st.info()`、`st.success()`、`st.warning()` 等显示状态信息 - 比 markdown 更明显
+- ✅ 创建独立的 `st.empty()` 占位符用于动态更新
+- ✅ 分层显示：总体进度 + 详细状态 + 剩余任务
+- ✅ 简洁格式：`进度: X/29 板块 | 已处理: X 只 | 失败: X 只`
+- ✅ 处理完成后清除进度显示占位符
+
+### Don'ts（避免）
+- ❌ 不要使用大标题（如 `### 📊 股票数据更新进度`）- 占用空间且不实用
+- ❌ 不要使用分隔线（如 `---`）- 增加视觉杂乱
+- ❌ 不要使用过于复杂的 markdown 格式 - `st.info()` 更明显
+
+### Session State Flag Pattern
+```python
+# 初始化 session state
+if "refresh_requested" not in st.session_state:
+    st.session_state.refresh_requested = False
+
+# 按钮回调中设置 flag
+if st.button("🔄 刷新数据"):
+    st.session_state.refresh_requested = True
+
+# 处理刷新逻辑
+if st.session_state.refresh_requested:
+    st.session_state.refresh_requested = False
+    # 执行刷新逻辑
+    st.rerun()
+```
+
+### 经验教训
+- 使用 `st.progress()` 进度条比纯文字更直观
+- 使用 `st.info()` 等方法显示状态比 markdown 更明显
+- 分层显示进度信息：总体进度 + 详细状态 + 剩余任务
+- 处理完成后及时清除占位符，保持界面整洁
+- 不要在按钮回调中直接使用 `st.rerun()`，使用 session state flag 避免无限循环
+
 ---
 
 # 总结

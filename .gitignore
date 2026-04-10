@@ -39,4 +39,4 @@ Thumbs.db
 htmlcov/
 
 # Claude
-.claude/
+.claude/logs/__pycache__/

@@ -418,6 +418,7 @@ def show_data_update():
 
         with col2:
             if st.button("🔄 更新股票数据", use_container_width=True, key="update_stocks"):
+                Logger.info("========== BUTTON CLICKED: update_stocks ==========")
                 _update_stocks_data(storage)
 
         with col3:
@@ -559,25 +560,36 @@ def _update_stocks_data(storage: StockStorage):
     from data.fetcher import DataFetcher
     from analysis.indicators import IndicatorCalculator
     from datetime import datetime, timedelta
+    from utils.logger import Logger
 
-    update_placeholder = st.empty()
-    progress_placeholder = st.empty()
+    Logger.info("========== _update_stocks_data: START ==========")
+    Logger.info("_update_stocks_data: Starting stock data update")
+
+    # Create progress displays
+    progress_bar = st.progress(0)
+    current_status = st.empty()
+    completed_info = st.empty()
+    remaining_info = st.empty()
 
     try:
         # Get all sectors from database
-        update_placeholder.info("正在获取板块列表...")
+        current_status.info("正在获取板块列表...")
         sectors_config = storage.get_all_sectors()
 
         if not sectors_config:
             st.error("数据库中没有板块数据，请先更新板块数据")
+            progress_bar.empty()
+            Logger.warning("_update_stocks_data: No sectors found in database")
             return
+
+        Logger.info(f"_update_stocks_data: Found {len(sectors_config)} sectors")
 
         # Configuration
         years_to_keep = 7
         sector_workers = 8
-        stock_workers = 16  # More workers for stocks
+        stock_workers = 16
 
-        update_placeholder.info(f"正在获取 {len(sectors_config)} 个板块配置...")
+        current_status.info(f"准备更新 {len(sectors_config)} 个板块...")
 
         # Calculate date range
         end_date = datetime.now().strftime('%Y%m%d')
@@ -586,14 +598,20 @@ def _update_stocks_data(storage: StockStorage):
         # Thread-safe counters
         total_lock = threading.Lock()
         processed_stocks = 0
-        failed_stocks = 0  # Changed from skipped_stocks
+        failed_stocks = 0
         total_sectors = len(sectors_config)
-
-        # Progress tracking
         sectors_processed = 0
-        stock_progress = []
+        completed_sectors = []
 
-        def process_stock(stock_dict: Dict, sector_name: str, start_date: str, end_date: str, thread_id: int) -> tuple:
+        Logger.info("_update_stocks_data: Starting parallel processing")
+
+        # Initial progress display
+        progress_bar.progress(0)
+        current_status.info(f"开始处理 0/{total_sectors} 个板块...")
+        completed_info.empty()
+        remaining_info.empty()
+
+        def process_stock(stock_dict: Dict, sector_name: str, start_date: str, end_date: str) -> tuple:
             """Process a single stock.
 
             Args:
@@ -601,10 +619,9 @@ def _update_stocks_data(storage: StockStorage):
                 sector_name: Sector name
                 start_date: Start date for history
                 end_date: End date for history
-                thread_id: Thread identifier
 
             Returns:
-                Tuple of (success, symbol, reason) - Added reason for debugging
+                Tuple of (success, symbol, sector_name)
             """
             # Use a separate storage instance for each thread
             db = DatabaseManager()
@@ -614,7 +631,7 @@ def _update_stocks_data(storage: StockStorage):
 
             symbol = stock_dict.get('symbol', '')
             if not symbol:
-                return (False, symbol, 'Empty symbol')
+                return (False, symbol, sector_name)
 
             try:
                 # Check if stock info needs update (missing name)
@@ -629,7 +646,7 @@ def _update_stocks_data(storage: StockStorage):
                         from datetime import datetime as dt
                         last_date = dt.strptime(latest_data['date'], '%Y-%m-%d')
                         if (dt.now() - last_date).days < 3:
-                            skip_data_update = True  # Skip historical data, but still check stock info
+                            skip_data_update = True
                 except Exception:
                     pass
 
@@ -638,7 +655,7 @@ def _update_stocks_data(storage: StockStorage):
                     history_df = thread_fetcher.get_stock_history(symbol, start_date, end_date)
 
                     if history_df is None or history_df.empty:
-                        return (False, symbol, 'No history data')
+                        return (False, symbol, sector_name)
 
                     # Calculate indicators
                     history_df = thread_calculator.calculate_all(history_df)
@@ -671,42 +688,48 @@ def _update_stocks_data(storage: StockStorage):
                             'industry': value_dict.get(industry_index, '') if industry_index is not None else '',
                             'sector': sector_name,
                             'market_cap': value_dict.get(market_cap_index, 0) if market_cap_index is not None else 0,
-                            'pe_ratio': 0,  # Not available in this API
-                            'pb_ratio': 0,  # Not available in this API
+                            'pe_ratio': 0,
+                            'pb_ratio': 0,
                             'list_date': str(value_dict.get(list_date_index, '')) if list_date_index is not None else ''
                         }
                         thread_storage.save_stock(stock_data)
 
-                return (True, symbol, '')
+                return (True, symbol, sector_name)
 
             except Exception as e:
-                return (False, symbol, str(e))
+                return (False, symbol, sector_name)
+
             finally:
                 db.close()
 
         def process_sector(sector_config: Dict) -> tuple:
-            """Process a single sector and return (stocks_count, skipped_count).
+            """Process a single sector and return (processed_count, failed_count, sector_name).
 
             Args:
                 sector_config: Sector config dictionary from database
 
             Returns:
-                Tuple of (processed_count, skipped_count)
+                Tuple of (processed_count, failed_count, sector_name)
             """
             nonlocal sectors_processed
 
             sector_name = sector_config['sector_name']
             sector_type = sector_config['sector_type']
             processed_count = 0
-            failed_count = 0  # Changed from skipped_count
+            failed_count = 0
+
+            Logger.info(f"process_sector: Starting to process sector {sector_name}")
 
             try:
                 # Get stocks in this sector
                 thread_fetcher = DataFetcher()
                 stocks_df = thread_fetcher.get_sector_stocks(sector_name, sector_type)
 
+                Logger.info(f"process_sector: Got {len(stocks_df) if stocks_df is not None else 0} stocks for sector {sector_name}")
+
                 if stocks_df is None or stocks_df.empty:
-                    return (0, 0)
+                    Logger.warning(f"process_sector: No stocks found for sector {sector_name}")
+                    return (0, 0, sector_name)
 
                 # Convert to list of dicts for faster iteration
                 stocks_list = []
@@ -724,15 +747,14 @@ def _update_stocks_data(storage: StockStorage):
                             stock,
                             sector_name,
                             start_date,
-                            end_date,
-                            sectors_processed
+                            end_date
                         ): stock
                         for stock in stocks_list
                     }
 
                     for future in as_completed(futures):
                         try:
-                            success, symbol, reason = future.result()
+                            success, symbol, _ = future.result()
                             if success:
                                 processed_count += 1
                             else:
@@ -740,41 +762,68 @@ def _update_stocks_data(storage: StockStorage):
                         except Exception:
                             failed_count += 1
 
-                        # Update progress
-                        with total_lock:
-                            total = processed_stocks + failed_stocks + processed_count + failed_count
-                            # Update local tracking
-                            pass
-
-                return (processed_count, failed_count)
+                return (processed_count, failed_count, sector_name)
 
             except Exception as e:
-                return (0, 0)
+                return (0, 0, sector_name)
 
             finally:
+                Logger.info(f"process_sector: {sector_name} finally block, incrementing sectors_processed")
                 with total_lock:
-                    nonlocal sectors_processed
                     sectors_processed += 1
+                    Logger.info(f"process_sector: sectors_processed is now {sectors_processed}/{total_sectors}")
 
         # Process sectors in parallel
         with ThreadPoolExecutor(max_workers=sector_workers) as executor:
             # Submit all sector tasks
             futures = {executor.submit(process_sector, sector): sector for sector in sectors_config}
 
+            Logger.info(f"_update_stocks_data: Submitted {len(futures)} sector tasks")
+
             # Process completed tasks and update progress
             for future in as_completed(futures):
                 try:
-                    processed, failed = future.result()
+                    Logger.info("_update_stocks_data: Got a completed future, getting result...")
+                    processed, failed, sector_name = future.result()
+
                     with total_lock:
                         processed_stocks += processed
                         failed_stocks += failed
-                    # Update progress display
-                    progress_placeholder.info(
-                        f"进度: {sectors_processed}/{total_sectors} 板块 | "
-                        f"已处理: {processed_stocks} 只 | 失败: {failed_stocks} 只"
-                    )
+                        completed_sectors.append(sector_name)
+
+                    Logger.info(f"_update_stocks_data: Sector {sector_name} completed - processed: {processed}, failed: {failed}, sectors_processed: {sectors_processed}/{total_sectors}")
+
+                    # Update progress bar
+                    progress = sectors_processed / total_sectors
+                    progress_bar.progress(progress)
+
+                    # Update current status
+                    current_status.info(f"进度: {sectors_processed}/{total_sectors} 板块 | 已处理: {processed_stocks} 只 | 失败: {failed_stocks} 只")
+
+                    # Show completed sector info
+                    completed_info.info(f"最新完成: {sector_name} (已处理: {processed} 只, 失败: {failed} 只)")
+
+                    # Show remaining sectors
+                    remaining = [s['sector_name'] for s in sectors_config
+                                if s['sector_name'] not in completed_sectors][:3]
+                    if remaining:
+                        remaining_info.info(f"待处理: {', '.join(remaining)}...")
+                    else:
+                        remaining_info.empty()
+
                 except Exception as e:
+                    Logger.error(f"_update_stocks_data: Error processing sector: {str(e)}")
+                    # 显示错误信息
+                    st.error(f"处理板块时出错: {str(e)}")
                     pass
+
+        Logger.info(f"_update_stocks_data: Processing complete - total processed: {processed_stocks}, failed: {failed_stocks}")
+
+        # Clear progress and status displays
+        progress_bar.empty()
+        current_status.empty()
+        completed_info.empty()
+        remaining_info.empty()
 
         # Display summary
         if processed_stocks > 0:
@@ -786,7 +835,12 @@ def _update_stocks_data(storage: StockStorage):
             st.warning("⚠️ 没有股票被处理，请检查 akshare API 连接")
 
     except Exception as e:
-        st.error(f"更新失败: {str(e)}")
+            Logger.error(f"_update_stocks_data: Exception: {str(e)}")
+            progress_bar.empty()
+            current_status.empty()
+            completed_info.empty()
+            remaining_info.empty()
+            st.error(f"更新失败: {str(e)}")
 
 
 def _update_indicators_data(storage: StockStorage):
