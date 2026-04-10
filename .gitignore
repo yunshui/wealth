@@ -16,7 +16,7 @@ data/*.db
 data/cache/
 
 # Logs
-logs/*.log
+logs/
 
 # IDE
 .vscode/
