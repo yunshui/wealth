@@ -29,11 +29,17 @@ if "nav_module" not in st.session_state:
 if "selected_sector" not in st.session_state:
     st.session_state.selected_sector = None
 
-if "last_refresh_time" not in st.session_state:
-    st.session_state.last_refresh_time = 0
+if "selected_symbol" not in st.session_state:
+    st.session_state.selected_symbol = None
 
 if "sector_data" not in st.session_state:
     st.session_state.sector_data = {}
+
+if "last_refresh_time" not in st.session_state:
+    st.session_state.last_refresh_time = 0
+
+if "refresh_requested" not in st.session_state:
+    st.session_state.refresh_requested = False
 
 
 def load_sectors():
@@ -174,16 +180,21 @@ with content_col:
                 st.markdown(f"<p style='color: #000000;'><strong>当前板块:</strong> {sector['sector_name']}</p>", unsafe_allow_html=True)
             with col_right:
                 if st.button("🔄 刷新数据", key="refresh_sector"):
-                    st.session_state.sector_data = {}
-                    st.session_state.last_refresh_time = 0
-                    st.rerun()
+                    st.session_state.refresh_requested = True
+
+            # Handle refresh request
+            if st.session_state.refresh_requested:
+                st.session_state.sector_data = {}
+                st.session_state.last_refresh_time = 0
+                st.session_state.refresh_requested = False
+                st.rerun()
 
             # Auto-refresh every 5 minutes
             current_time = time.time()
             if st.session_state.last_refresh_time > 0 and current_time - st.session_state.last_refresh_time > 300:  # 5 minutes
                 st.session_state.sector_data = {}
                 st.session_state.last_refresh_time = 0
-                st.rerun()
+                st.session_state.refresh_requested = True
 
             # Get sector leaders
             leaders = storage.get_sector_leaders(sector_id)
