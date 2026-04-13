@@ -233,7 +233,7 @@ class StockStorage:
             conn = self.db.get_connection()
             cursor = conn.cursor()
             cursor.execute('''
-                SELECT symbol, name, industry, sector, market_cap, pe_ratio, pb_ratio, list_date
+                SELECT symbol, name, industry, sector, market_cap, pe_ratio, pb_ratio, list_date, updated_at
                 FROM stocks WHERE symbol = ?
             ''', (symbol,))
             row = cursor.fetchone()
@@ -246,7 +246,8 @@ class StockStorage:
                     'market_cap': row['market_cap'],
                     'pe_ratio': row['pe_ratio'],
                     'pb_ratio': row['pb_ratio'],
-                    'list_date': row['list_date']
+                    'list_date': row['list_date'],
+                    'updated_at': row['updated_at']
                 }
             return None
         except Exception as e:
@@ -313,6 +314,15 @@ class StockStorage:
                 VALUES ({placeholders})
             '''
             cursor.executemany(query, data)
+
+            # Update stocks.updated_at for affected symbols
+            if 'symbol' in df.columns:
+                unique_symbols = df['symbol'].unique()
+                for symbol in unique_symbols:
+                    cursor.execute('''
+                        UPDATE stocks SET updated_at = ? WHERE symbol = ?
+                    ''', (datetime.now().strftime('%Y-%m-%d %H:%M:%S'), symbol))
+
             conn.commit()
             Logger.debug(f"Saved {len(df)} stock data rows")
             return True
