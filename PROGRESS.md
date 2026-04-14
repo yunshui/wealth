@@ -2,6 +2,51 @@
 
 ## 项目进度记录
 
+### 2026-04-14 - 数据配置化和缓存优化 ✅
+
+**已完成**:
+
+1. **股票数据增量更新** (v0.5.7)
+   - 添加 `has_stock_data_for_date()` 方法检查当天数据是否存在
+   - 添加 `save_stock_data_incremental()` 方法只插入不存在的记录
+   - 修改更新逻辑：如果当天数据存在则跳过更新
+   - 大幅提升更新速度，减少不必要的网络请求和数据库操作
+
+2. **stock_data表添加updated_at字段** (v0.5.8)
+   - `data/database.py`: 表结构定义添加 `updated_at TEXT` 字段
+   - `data/database.py`: 添加数据库迁移逻辑，自动为现有数据填充时间戳
+   - `data/storage.py`: `save_stock_data()` 和 `save_stock_data_incremental()` 自动设置当前时间戳
+   - 历史数据的 updated_at 已全部更新为迁移时的时间戳
+   - 可以通过 SQL 直接查看每条数据的更新时间
+
+3. **历史数据起始日期配置化** (v0.5.9)
+   - 创建 `config/data_config.json` 配置文件
+   - 添加 `data.start_date` 配置项，默认 `2025-01-01`（1年历史数据）
+   - `utils/config.py`: 添加 `get_data_start_date()` 方法从配置文件读取
+   - `ui/pages.py`: 更新数据逻辑使用配置的起始日期
+   - 可根据需要修改为 `2018-01-01`（7年历史数据）等
+   - 大幅减少数据更新时间和存储空间
+
+4. **更新缓存时间配置化** (v0.5.10)
+   - `config/data_config.json`: 添加 `data.update_cache_hours` 配置项，默认 4 小时
+   - `utils/config.py`: 添加 `get_update_cache_hours()` 方法
+   - `ui/pages.py`: 使用配置的缓存时间替代硬编码的 2 小时
+   - 最近4小时内更新过的股票数据将跳过更新
+   - 可根据需要调整缓存时间
+
+**效果**:
+- ✅ 增量更新避免重复数据，提升更新效率
+- ✅ updated_at 字段方便数据追踪和调试
+- ✅ 历史数据起始日期可配置，默认1年数据大幅节省资源
+- ✅ 缓存时间可配置，默认4小时平衡数据新鲜度和更新频率
+
+**Commits**:
+- 待提交
+
+**当前状态**: Stage 1-6 全部完成 ✅
+
+---
+
 ### 2026-04-13 - 股票更新UI优化和问题修复 ✅
 
 **已完成**:

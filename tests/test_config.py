@@ -9,7 +9,11 @@ def test_config_db_path():
 
 def test_config_data_start_date():
     """Test data start date is correctly defined"""
-    assert Config.DATA_START_DATE == '2018-01-01'
+    # Test that get_data_start_date returns a valid date string
+    start_date = Config.get_data_start_date()
+    assert isinstance(start_date, str)
+    assert len(start_date) == 10  # YYYY-MM-DD format
+    assert start_date.count('-') == 2
 
 
 def test_config_ensemble_weights():

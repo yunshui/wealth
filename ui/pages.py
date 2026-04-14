@@ -591,9 +591,11 @@ def _update_stocks_data(storage: StockStorage):
         sector_timeout = 1800  # 30 minutes timeout per sector (reduced from 300 seconds)
         stock_timeout = 120   # 2 minutes timeout per stock (reduced from 60 seconds)
 
-        # Calculate date range
+        # Calculate date range - get from config file
+        from utils.config import Config
         end_date = datetime.now().strftime('%Y%m%d')
-        start_date = (datetime.now() - timedelta(days=years_to_keep*365)).strftime('%Y%m%d')
+        start_date = Config.get_data_start_date().replace('-', '')  # Convert YYYY-MM-DD to YYYYMMDD
+        cache_hours = Config.get_update_cache_hours()  # Get cache hours from config
 
         # Thread-safe counters
         total_lock = threading.Lock()
@@ -690,16 +692,26 @@ def _update_stocks_data(storage: StockStorage):
                         thread_fetcher = DataFetcher()
                         thread_calculator = IndicatorCalculator()
 
-                        # Check if stock needs update
+                        # Process stock - check if today's data already exists
                         needs_update = True
+                        from datetime import datetime as dt, date as dt_date
+
                         try:
                             stock_info = thread_storage.get_stock(symbol)
                             if stock_info and stock_info.get('updated_at'):
-                                from datetime import datetime as dt
                                 last_update = dt.strptime(stock_info['updated_at'], '%Y-%m-%d %H:%M:%S')
                                 hours_since_update = (dt.now() - last_update).total_seconds() / 3600
-                                if hours_since_update < 2:
+
+                                # Check if today's data already exists in database
+                                today_str = dt.now().strftime('%Y-%m-%d')
+                                has_today_data = thread_storage.has_stock_data_for_date(symbol, today_str)
+
+                                if has_today_data:
+                                    # Today's data exists, skip update
                                     needs_update = False
+                                elif hours_since_update < cache_hours:
+                                    # Within cache time but no today data, still update
+                                    needs_update = True
                         except:
                             pass
 
@@ -707,12 +719,17 @@ def _update_stocks_data(storage: StockStorage):
                             history_df = thread_fetcher.get_stock_history(symbol, start_date, end_date)
                             if history_df is not None and not history_df.empty:
                                 history_df = thread_calculator.calculate_all(history_df)
-                                thread_storage.save_stock_data(history_df)
-                                processed_count += 1
+                                # Use incremental save to only insert non-existing records
+                                inserted_count = thread_storage.save_stock_data_incremental(history_df)
+                                if inserted_count > 0:
+                                    processed_count += 1
+                                else:
+                                    # No new data inserted, count as cached
+                                    processed_count += 1
                             else:
                                 failed_count += 1
                         else:
-                            processed_count += 1  # Cached, count as processed
+                            processed_count += 1  # Today's data exists, count as processed
 
                     except Exception as e:
                         failed_count += 1

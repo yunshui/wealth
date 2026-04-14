@@ -297,10 +297,12 @@ class StockStorage:
             columns = ['date', 'symbol', 'open', 'high', 'low', 'close', 'volume', 'amount',
                       'ma5', 'ma10', 'ma20', 'ma60', 'macd', 'macd_signal', 'macd_hist',
                       'kdj_k', 'kdj_d', 'kdj_j', 'rsi6', 'rsi12', 'rsi24',
-                      'boll_upper', 'boll_middle', 'boll_lower', 'obv']
+                      'boll_upper', 'boll_middle', 'boll_lower', 'obv', 'updated_at']
             for col in columns:
                 if col not in df.columns:
                     df[col] = None
+            # Set updated_at to current time for all records
+            df['updated_at'] = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
             data = []
             for _, row in df.iterrows():
                 data.append(tuple(row.get(col) for col in columns))
@@ -310,7 +312,7 @@ class StockStorage:
                 (date, symbol, open, high, low, close, volume, amount,
                  ma5, ma10, ma20, ma60, macd, macd_signal, macd_hist,
                  kdj_k, kdj_d, kdj_j, rsi6, rsi12, rsi24,
-                 boll_upper, boll_middle, boll_lower, obv)
+                 boll_upper, boll_middle, boll_lower, obv, updated_at)
                 VALUES ({placeholders})
             '''
             cursor.executemany(query, data)
@@ -329,6 +331,73 @@ class StockStorage:
         except Exception as e:
             Logger.error(f"Failed to save stock data: {str(e)}")
             raise StorageException(f"Failed to save stock data: {str(e)}")
+
+    def save_stock_data_incremental(self, df: pd.DataFrame) -> int:
+        """Save stock historical data incrementally (insert only non-existing records).
+
+        Args:
+            df: DataFrame with stock data
+
+        Returns:
+            Number of new records inserted
+        """
+        try:
+            conn = self.db.get_connection()
+            cursor = conn.cursor()
+            columns = ['date', 'symbol', 'open', 'high', 'low', 'close', 'volume', 'amount',
+                      'ma5', 'ma10', 'ma20', 'ma60', 'macd', 'macd_signal', 'macd_hist',
+                      'kdj_k', 'kdj_d', 'kdj_j', 'rsi6', 'rsi12', 'rsi24',
+                      'boll_upper', 'boll_middle', 'boll_lower', 'obv', 'updated_at']
+            for col in columns:
+                if col not in df.columns:
+                    df[col] = None
+
+            inserted_count = 0
+            current_time = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+
+            for _, row in df.iterrows():
+                date = row.get('date')
+                symbol = row.get('symbol')
+
+                # Check if record already exists
+                cursor.execute('''
+                    SELECT COUNT(*) FROM stock_data
+                    WHERE symbol = ? AND date = ?
+                ''', (symbol, date))
+                count = cursor.fetchone()[0]
+
+                # Only insert if not exists
+                if count == 0:
+                    # Add current timestamp to the row data
+                    row_data = list(row.get(col) for col in columns[:-1])  # All columns except updated_at
+                    row_data.append(current_time)  # Add current timestamp for updated_at
+                    data = tuple(row_data)
+                    placeholders = ', '.join(['?' for _ in columns])
+                    query = f'''
+                        INSERT INTO stock_data
+                        (date, symbol, open, high, low, close, volume, amount,
+                         ma5, ma10, ma20, ma60, macd, macd_signal, macd_hist,
+                         kdj_k, kdj_d, kdj_j, rsi6, rsi12, rsi24,
+                         boll_upper, boll_middle, boll_lower, obv, updated_at)
+                        VALUES ({placeholders})
+                    '''
+                    cursor.execute(query, data)
+                    inserted_count += 1
+
+            # Update stocks.updated_at for affected symbols
+            if inserted_count > 0 and 'symbol' in df.columns:
+                unique_symbols = df['symbol'].unique()
+                for symbol in unique_symbols:
+                    cursor.execute('''
+                        UPDATE stocks SET updated_at = ? WHERE symbol = ?
+                    ''', (current_time, symbol))
+
+            conn.commit()
+            Logger.debug(f"Inserted {inserted_count} new stock data records (skipped {len(df) - inserted_count} existing)")
+            return inserted_count
+        except Exception as e:
+            Logger.error(f"Failed to save stock data incrementally: {str(e)}")
+            raise StorageException(f"Failed to save stock data incrementally: {str(e)}")
 
     def get_stock_data(self, symbol: str, start_date: str = None, end_date: str = None) -> pd.DataFrame:
         """Get stock historical data."""
@@ -371,6 +440,29 @@ class StockStorage:
         except Exception as e:
             Logger.error(f"Failed to get latest stock data: {str(e)}")
             raise StorageException(f"Failed to get latest stock data: {str(e)}")
+
+    def has_stock_data_for_date(self, symbol: str, date: str) -> bool:
+        """Check if stock data exists for a specific date.
+
+        Args:
+            symbol: Stock symbol
+            date: Date in YYYY-MM-DD format
+
+        Returns:
+            True if data exists, False otherwise
+        """
+        try:
+            conn = self.db.get_connection()
+            cursor = conn.cursor()
+            cursor.execute('''
+                SELECT COUNT(*) FROM stock_data
+                WHERE symbol = ? AND date = ?
+            ''', (symbol, date))
+            count = cursor.fetchone()[0]
+            return count > 0
+        except Exception as e:
+            Logger.error(f"Failed to check stock data for date: {str(e)}")
+            return False
 
     # ========== Prediction Operations ==========
 

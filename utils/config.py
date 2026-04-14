@@ -1,17 +1,20 @@
 """Configuration management module."""
 
+import json
+import os
+
 
 class Config:
     """Application configuration."""
 
     # Version
-    VERSION = "0.5.6"
+    VERSION = "0.5.10"
 
     # Database
     DB_PATH = 'data/stock_data.db'
 
     # Data
-    DATA_START_DATE = '2018-01-01'  # 7 years of historical data
+    DEFAULT_DATA_START_DATE = '2025-01-01'  # Default 1 year of historical data
     DATA_UPDATE_TIME = '15:30'  # Update after market close
 
     # Sectors
@@ -51,6 +54,40 @@ class Config:
     def get_db_path(cls) -> str:
         """Get database file path."""
         return cls.DB_PATH
+
+    @classmethod
+    def get_data_start_date(cls) -> str:
+        """Get data start date from config file.
+
+        Returns:
+            Data start date string in YYYY-MM-DD format
+        """
+        config_file = 'config/data_config.json'
+        if os.path.exists(config_file):
+            try:
+                with open(config_file, 'r', encoding='utf-8') as f:
+                    config = json.load(f)
+                    return config.get('data', {}).get('start_date', cls.DEFAULT_DATA_START_DATE)
+            except Exception:
+                pass
+        return cls.DEFAULT_DATA_START_DATE
+
+    @classmethod
+    def get_update_cache_hours(cls) -> int:
+        """Get update cache hours from config file.
+
+        Returns:
+            Cache hours value (default 4 hours)
+        """
+        config_file = 'config/data_config.json'
+        if os.path.exists(config_file):
+            try:
+                with open(config_file, 'r', encoding='utf-8') as f:
+                    config = json.load(f)
+                    return config.get('data', {}).get('update_cache_hours', 4)
+            except Exception:
+                pass
+        return 4
 
     @classmethod
     def get_model_path(cls, model_type: str) -> str:

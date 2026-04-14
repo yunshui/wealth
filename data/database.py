@@ -105,9 +105,23 @@ class DatabaseManager:
                 rsi6 REAL, rsi12 REAL, rsi24 REAL,
                 boll_upper REAL, boll_middle REAL, boll_lower REAL,
                 obv REAL,
+                updated_at TEXT,
                 FOREIGN KEY (symbol) REFERENCES stocks(symbol)
             )
         ''')
+
+        # Add updated_at column if not exists (for existing databases)
+        cursor.execute("PRAGMA table_info(stock_data)")
+        columns = [column[1] for column in cursor.fetchall()]
+        if 'updated_at' not in columns:
+            Logger.info("Adding updated_at column to stock_data table...")
+            cursor.execute("ALTER TABLE stock_data ADD COLUMN updated_at TEXT")
+            # Update existing records with current timestamp
+            from datetime import datetime
+            current_time = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+            cursor.execute("UPDATE stock_data SET updated_at = ? WHERE updated_at IS NULL", (current_time,))
+            conn.commit()
+            Logger.info("Added updated_at column and updated existing records")
 
         # Create predictions table
         cursor.execute('''
