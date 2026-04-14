@@ -2,6 +2,54 @@
 
 ## 项目进度记录
 
+### 2026-04-13 - 股票更新UI优化和问题修复 ✅
+
+**已完成**:
+1. **Logger导入修复** - `ui/pages.py`
+   - 添加缺失的 `from utils.logger import Logger` 导入
+   - 修复 `NameError: name 'Logger' is not defined` 错误
+   - 移除 `process_stock` 函数中的重复导入
+
+2. **串行处理模式** - `ui/pages.py`
+   - 从并行处理改为串行处理实现实时UI更新
+   - 解决UI进度卡住不更新的问题
+   - 提升用户体验，实时显示处理进度
+
+3. **缓存时间优化** - `ui/pages.py`
+   - 缓存检查从10分钟改为2小时
+   - 减少`hours_since_update`计算逻辑
+   - 更新日志提示信息
+
+4. **超时设置优化** - `ui/pages.py`
+   - 板块超时：300秒 → 1800秒（30分钟）
+   - 股票超时：60秒 → 120秒（2分钟）
+   - 解决因超时导致的进度卡死问题
+
+5. **UI显示格式优化** - `ui/pages.py`
+   - 按用户要求优化显示格式
+   - 显示：开始处理 X/Y 个板块...
+   - 显示：处理板块 XXX，股票 XXX - XXX
+   - 显示：板块进度 X/Y
+   - 删除配置展开面板，简化界面
+
+6. **数据更新时间戳** - `data/storage.py`
+   - `save_stock_data` 方法现在更新 `stocks.updated_at`
+   - `get_stock` 方法返回 `updated_at` 字段
+   - 支持缓存检查功能
+
+**效果**:
+- ✅ UI进度实时更新，用户可以看到当前处理状态
+- ✅ 缓存时间更合理，减少不必要的重复更新
+- ✅ 超时设置合理，避免进度卡死
+- ✅ 界面简洁，专注显示关键信息
+
+**Commits**:
+- 6efba6d: feat: optimize stock update UI display and fix issues
+
+**当前状态**: Stage 1-6 全部完成 ✅
+
+---
+
 ### 2026-04-10 - 无龙头股板块刷新提示修复 ✅
 
 **已完成**:
