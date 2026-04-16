@@ -464,6 +464,33 @@ class StockStorage:
             Logger.error(f"Failed to check stock data for date: {str(e)}")
             return False
 
+    def get_stock_latest_date(self, symbol: str) -> Optional[str]:
+        """Get the latest date of stock data in database.
+
+        Args:
+            symbol: Stock symbol
+
+        Returns:
+            Latest date string in YYYY-MM-DD format, or None if no data
+        """
+        try:
+            conn = self.db.get_connection()
+            cursor = conn.cursor()
+            cursor.execute('''
+                SELECT MAX(date) FROM stock_data
+                WHERE symbol = ?
+            ''', (symbol,))
+            result = cursor.fetchone()[0]
+            if result:
+                # Convert YYYYMMDD to YYYY-MM-DD
+                if len(result) == 8 and result.isdigit():
+                    return f"{result[:4]}-{result[4:6]}-{result[6:8]}"
+                return result
+            return None
+        except Exception as e:
+            Logger.error(f"Failed to get stock latest date: {str(e)}")
+            return None
+
     # ========== Prediction Operations ==========
 
     def save_prediction(self, prediction_data: Dict) -> bool:

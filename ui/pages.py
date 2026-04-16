@@ -716,7 +716,19 @@ def _update_stocks_data(storage: StockStorage):
                             pass
 
                         if needs_update:
-                            history_df = thread_fetcher.get_stock_history(symbol, start_date, end_date)
+                            # Get the latest date in database for incremental update
+                            latest_date = thread_storage.get_stock_latest_date(symbol)
+                            if latest_date:
+                                # Convert YYYY-MM-DD to YYYYMMDD and add 1 day
+                                from datetime import timedelta
+                                latest_dt = dt.strptime(latest_date, '%Y-%m-%d')
+                                next_date = (latest_dt + timedelta(days=1)).strftime('%Y%m%d')
+                                stock_start_date = next_date
+                            else:
+                                # No data exists, start from config start date
+                                stock_start_date = start_date
+
+                            history_df = thread_fetcher.get_stock_history(symbol, stock_start_date, end_date)
                             if history_df is not None and not history_df.empty:
                                 history_df = thread_calculator.calculate_all(history_df)
                                 # Use incremental save to only insert non-existing records
