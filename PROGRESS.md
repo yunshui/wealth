@@ -2,6 +2,79 @@
 
 ## 项目进度记录
 
+### 2026-04-17 - 配置驱动和性能优化 ✅
+
+**已完成**:
+
+1. **股票增量更新优化** (v0.5.11)
+   - 添加 `get_stock_latest_date()` 方法获取股票最新日期
+   - 修改更新逻辑：只从最新日期+1天开始获取数据
+   - 配合增量保存，避免重复获取已有数据
+   - 大幅减少网络请求和更新时间
+
+2. **板块和龙头股配置化** (v0.5.12)
+   - 扩展 `config/MAJOR_SECTORS.json` 为新格式，包含具体股票列表
+   - 每个板块配置 5 只龙头股票，共 145 只股票（后调整为 116 只）
+   - 修改"更新股票数据"逻辑，只更新配置的股票
+   - 添加 `get_major_sectors_config()` 方法读取配置
+   - 后续技术指标更新和模型训练都基于配置的股票
+
+3. **配置格式兼容性** (v0.5.13)
+   - `data/storage.py`: 更新 `get_major_sectors()` 支持新配置格式
+   - `ui/pages.py`: 更新 `_update_sectors_data()` 处理新格式
+   - 保持向后兼容旧配置格式
+   - 修复板块总览显示问题
+
+4. **板块数据更新逻辑重构** (v0.5.14)
+   - 直接从配置文件读取板块信息，不从 akshare 获取所有板块
+   - 从 akshare API 获取板块代码和评分信息
+   - 清理配置文件中不存在的旧板块数据
+   - 将配置的股票保存为板块龙头股
+   - 更快、更精准的板块更新
+
+5. **技术指标和模型训练优化** (v0.5.15)
+   - `更新技术指标`: 只处理配置的股票，不再处理数据库所有股票
+   - `训练预测模型`: 只使用配置的股票训练
+   - 修复"更新技术指标"界面卡死问题
+   - 大幅提升性能：145 只股票 vs 数千只
+
+6. **技术指标更新逻辑重构** (v0.5.16)
+   - 以配置文件为准，不依赖数据库中数据状态
+   - 从 akshare 获取数据并计算技术指标
+   - 使用增量获取（只获取缺失的数据）
+   - 自动更新 `updated_at` 时间戳
+   - 显示详细的成功/失败统计
+
+**经验教训**:
+
+1. **配置驱动设计的重要性**
+   - 将业务逻辑从数据库状态解耦，改为由配置文件驱动
+   - 避免因数据库数据不完整导致功能异常
+   - 提高可控性和可维护性
+
+2. **性能优化的关键**
+   - 减少处理数据量：从数千只股票降至 116 只精选股票
+   - 增量获取：只获取缺失的数据，避免重复网络请求
+   - 限制并发：避免 API 速率限制
+
+3. **错误处理和进度显示**
+   - 显示成功/失败计数，让用户了解处理结果
+   - 记录失败原因，方便排查问题
+   - 实时进度更新，提升用户体验
+
+**Commits**:
+- a8273a9: feat: implement true incremental stock data update (v0.5.11)
+- ffd6e8c: feat: add stocks configuration for targeted updates (v0.5.12)
+- 0e9ab29: fix: correct indentation errors in stock update loop
+- c2917d7: feat: support new sectors config format in database loading (v0.5.13)
+- f5734d3: feat: update sector data logic to use config file directly (v0.5.14)
+- 430ea29: feat: update indicators and model training to use configured stocks (v0.5.15)
+- 395854a: feat: update indicators from config file regardless of DB state (v0.5.16)
+
+**当前状态**: Stage 1-6 全部完成 ✅
+
+---
+
 ### 2026-04-14 - 数据配置化和缓存优化 ✅
 
 **已完成**:
