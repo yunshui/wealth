@@ -458,9 +458,23 @@ def _update_sectors_data(storage: StockStorage):
         if os.path.exists(config_path):
             with open(config_path, 'r', encoding='utf-8') as f:
                 config = json.load(f)
-            target_industries = set(config.get('industry', []))
-            target_concepts = set(config.get('concept', []))
-            update_placeholder.info(f"正在更新配置文件中的 {len(target_industries) + len(target_concepts)} 个主要板块...")
+
+            # Support new config format with 'sectors' array
+            if 'sectors' in config:
+                sectors_config = config.get('sectors', [])
+                target_industries = set()
+                target_concepts = set()
+                for sector_config in sectors_config:
+                    if sector_config['type'] == 'industry':
+                        target_industries.add(sector_config['name'])
+                    elif sector_config['type'] == 'concept':
+                        target_concepts.add(sector_config['name'])
+                update_placeholder.info(f"正在更新配置文件中的 {len(target_industries) + len(target_concepts)} 个主要板块...")
+            else:
+                # Support old config format
+                target_industries = set(config.get('industry', []))
+                target_concepts = set(config.get('concept', []))
+                update_placeholder.info(f"正在更新配置文件中的 {len(target_industries) + len(target_concepts)} 个主要板块...")
         else:
             update_placeholder.warning("配置文件不存在，将更新所有板块")
             target_industries = None

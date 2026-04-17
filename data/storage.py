@@ -93,15 +93,23 @@ class StockStorage:
             with open(config_path, 'r', encoding='utf-8') as f:
                 config = json.load(f)
 
-            industry_sectors = config.get('industry', [])
-            concept_sectors = config.get('concept', [])
+            # Support new config format with 'sectors' array
+            if 'sectors' in config:
+                sectors_config = config.get('sectors', [])
+                sector_type_map = {}
+                for sector_config in sectors_config:
+                    sector_type_map[sector_config['name']] = sector_config['type']
+            else:
+                # Support old config format
+                industry_sectors = config.get('industry', [])
+                concept_sectors = config.get('concept', [])
 
-            # Build sector type map
-            sector_type_map = {}
-            for name in industry_sectors:
-                sector_type_map[name] = 'industry'
-            for name in concept_sectors:
-                sector_type_map[name] = 'concept'
+                # Build sector type map
+                sector_type_map = {}
+                for name in industry_sectors:
+                    sector_type_map[name] = 'industry'
+                for name in concept_sectors:
+                    sector_type_map[name] = 'concept'
 
             # Query matching sectors from database
             conn = self.db.get_connection()
