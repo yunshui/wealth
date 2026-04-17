@@ -2,7 +2,7 @@
 
 import streamlit as st
 import pandas as pd
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Dict
 from concurrent.futures import ThreadPoolExecutor, as_completed
 import threading
@@ -611,7 +611,6 @@ def _update_stocks_data(storage: StockStorage):
     """
     from data.fetcher import DataFetcher
     from analysis.indicators import IndicatorCalculator
-    from datetime import datetime, timedelta
 
     Logger.info("========== _update_stocks_data: START ==========")
     Logger.info("_update_stocks_data: Starting stock data update")
@@ -734,16 +733,15 @@ def _update_stocks_data(storage: StockStorage):
 
                         # Process stock - check if today's data already exists
                         needs_update = True
-                        from datetime import datetime as dt, date as dt_date
 
                         try:
                             stock_info = thread_storage.get_stock(symbol)
                             if stock_info and stock_info.get('updated_at'):
-                                last_update = dt.strptime(stock_info['updated_at'], '%Y-%m-%d %H:%M:%S')
-                                hours_since_update = (dt.now() - last_update).total_seconds() / 3600
+                                last_update = datetime.strptime(stock_info['updated_at'], '%Y-%m-%d %H:%M:%S')
+                                hours_since_update = (datetime.now() - last_update).total_seconds() / 3600
 
                                 # Check if today's data already exists in database
-                                today_str = dt.now().strftime('%Y-%m-%d')
+                                today_str = datetime.now().strftime('%Y-%m-%d')
                                 has_today_data = thread_storage.has_stock_data_for_date(symbol, today_str)
 
                                 if has_today_data:
@@ -842,8 +840,6 @@ def _update_indicators_data(storage: StockStorage):
     from data.fetcher import DataFetcher
     from utils.config import Config
     import json
-    from datetime import datetime
-    from datetime import timedelta
 
     update_placeholder = st.empty()
     progress_placeholder = st.empty()
@@ -937,44 +933,51 @@ def _update_indicators_data(storage: StockStorage):
                     stock_start_date = start_date
                     Logger.debug(f"{stock['symbol']}: 无历史数据，从 {start_date} 开始获取")
 
-                # Fetch data from akshare
-                history_df = thread_fetcher.get_stock_history(stock['symbol'], stock_start_date, end_date)
-
-                if history_df is not None and not history_df.empty:
-                    Logger.info(f"{stock['symbol']}: 获取到 {len(history_df)} 条数据")
-                    Logger.debug(f"{stock['symbol']}: 数据列: {list(history_df.columns)}")
-
-                    # Validate required columns
-                    required_columns = ['date', 'symbol', 'open', 'high', 'low', 'close']
-                    missing_columns = [col for col in required_columns if col not in history_df.columns]
-                    if missing_columns:
-                        error_msg = f"数据缺少必需列: {missing_columns}"
-                        result['error'] = error_msg
-                        Logger.warning(f"{stock['symbol']}: {error_msg}, 实际列: {list(history_df.columns)}")
-                    else:
-                        # Calculate indicators
-                        df_with_indicators = thread_calculator.calculate_all(history_df)
-
-                        # Save updated data with current timestamp
-                        inserted_count = thread_storage.save_stock_data_incremental(df_with_indicators)
-
-                        if inserted_count > 0:
-                            result['success'] = True
-                            result['rows_processed'] = inserted_count
-                            Logger.info(f"{stock['symbol']}: 成功插入 {inserted_count} 条新数据")
-                        else:
-                            # No new data but stock exists
-                            result['success'] = True
-                            result['rows_processed'] = 0
-                            Logger.info(f"{stock['symbol']}: 无新数据插入（数据已存在）")
-                elif history_df is None:
-                    error_msg = 'API返回None（可能网络连接问题或股票代码无效）'
-                    result['error'] = error_msg
-                    Logger.warning(f"{stock['symbol']}: {error_msg}")
+                # Check if start_date is after end_date (already has latest data)
+                if int(stock_start_date) > int(end_date):
+                    # Already has the latest data, no need to update
+                    result['success'] = True
+                    result['rows_processed'] = 0
+                    Logger.info(f"{stock['symbol']}: 已有最新数据 ({latest_date})，无需更新")
                 else:
-                    error_msg = f'获取数据为空（起始日期: {stock_start_date}, 结束日期: {end_date}）'
-                    result['error'] = error_msg
-                    Logger.warning(f"{stock['symbol']}: {error_msg}")
+                    # Fetch data from akshare
+                    history_df = thread_fetcher.get_stock_history(stock['symbol'], stock_start_date, end_date)
+
+                    if history_df is not None and not history_df.empty:
+                        Logger.info(f"{stock['symbol']}: 获取到 {len(history_df)} 条数据")
+                        Logger.debug(f"{stock['symbol']}: 数据列: {list(history_df.columns)}")
+
+                        # Validate required columns
+                        required_columns = ['date', 'symbol', 'open', 'high', 'low', 'close']
+                        missing_columns = [col for col in required_columns if col not in history_df.columns]
+                        if missing_columns:
+                            error_msg = f"数据缺少必需列: {missing_columns}"
+                            result['error'] = error_msg
+                            Logger.warning(f"{stock['symbol']}: {error_msg}, 实际列: {list(history_df.columns)}")
+                        else:
+                            # Calculate indicators
+                            df_with_indicators = thread_calculator.calculate_all(history_df)
+
+                            # Save updated data with current timestamp
+                            inserted_count = thread_storage.save_stock_data_incremental(df_with_indicators)
+
+                            if inserted_count > 0:
+                                result['success'] = True
+                                result['rows_processed'] = inserted_count
+                                Logger.info(f"{stock['symbol']}: 成功插入 {inserted_count} 条新数据")
+                            else:
+                                # No new data but stock exists
+                                result['success'] = True
+                                result['rows_processed'] = 0
+                                Logger.info(f"{stock['symbol']}: 无新数据插入（数据已存在）")
+                    elif history_df is None:
+                        error_msg = 'API返回None（可能网络连接问题或股票代码无效）'
+                        result['error'] = error_msg
+                        Logger.warning(f"{stock['symbol']}: {error_msg}")
+                    else:
+                        error_msg = f'获取数据为空（起始日期: {stock_start_date}, 结束日期: {end_date}）'
+                        result['error'] = error_msg
+                        Logger.warning(f"{stock['symbol']}: {error_msg}")
 
             except Exception as e:
                 result['error'] = str(e)
@@ -1025,7 +1028,6 @@ def _train_models(storage: StockStorage):
         storage: StockStorage instance for fetching training data
     """
     from prediction.trainer import ModelTrainer
-    from datetime import datetime
     import json
     import os
     import pandas as pd
