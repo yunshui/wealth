@@ -574,15 +574,18 @@ def _update_stocks_data(storage: StockStorage):
     try:
         # Get all sectors from database
         current_status.info("正在获取板块列表...")
-        sectors_config = storage.get_all_sectors()
+        from utils.config import Config
+
+        # Load sectors configuration from config file
+        sectors_config = Config.get_major_sectors_config()
 
         if not sectors_config:
-            st.error("数据库中没有板块数据，请先更新板块数据")
+            st.error("配置文件中没有板块数据，请检查 config/MAJOR_SECTORS.json")
             progress_bar.empty()
-            Logger.warning("_update_stocks_data: No sectors found in database")
+            Logger.warning("_update_stocks_data: No sectors found in config file")
             return
 
-        Logger.info(f"_update_stocks_data: Found {len(sectors_config)} sectors")
+        Logger.info(f"_update_stocks_data: Found {len(sectors_config)} sectors in config")
 
         # Configuration
         years_to_keep = 7
@@ -592,7 +595,6 @@ def _update_stocks_data(storage: StockStorage):
         stock_timeout = 120   # 2 minutes timeout per stock (reduced from 60 seconds)
 
         # Calculate date range - get from config file
-        from utils.config import Config
         end_date = datetime.now().strftime('%Y%m%d')
         start_date = Config.get_data_start_date().replace('-', '')  # Convert YYYY-MM-DD to YYYYMMDD
         cache_hours = Config.get_update_cache_hours()  # Get cache hours from config
@@ -630,105 +632,92 @@ def _update_stocks_data(storage: StockStorage):
 
         # Process sectors sequentially to enable real-time UI updates
         for sector_idx, sector_config in enumerate(sectors_config):
-            sector_name = sector_config['sector_name']
-            sector_type = sector_config['sector_type']
+            sector_name = sector_config['name']
+            sector_type = sector_config['type']
+            stocks_list = sector_config.get('stocks', [])
 
             # Update UI with current sector progress
             sector_status.info(f"开始处理 {sectors_processed}/{total_sectors} 个板块...")
-            stock_status.info(f"正在获取板块 {sector_name} 的股票列表...")
+            stock_status.info(f"正在处理板块 {sector_name}，共 {len(stocks_list)} 只股票...")
             progress_status.empty()
 
+            if not stocks_list:
+                Logger.warning(f"process_sector: No stocks configured for sector {sector_name}")
+                sectors_processed += 1
+                progress = sectors_processed / total_sectors
+                progress_bar.progress(progress)
+                continue
+
+            this_sector_total = len(stocks_list)
+            processed_count = 0
+            failed_count = 0
+
+            Logger.info(f"process_sector: {sector_name} starting stock processing with {len(stocks_list)} stocks")
+
             try:
-                # Get stocks in this sector
-                thread_fetcher = DataFetcher()
-                stocks_df = thread_fetcher.get_sector_stocks(sector_name, sector_type)
-
-                if stocks_df is None or stocks_df.empty:
-                    Logger.warning(f"process_sector: No stocks found for sector {sector_name}")
-                    sectors_processed += 1
-                    progress = sectors_processed / total_sectors
-                    progress_bar.progress(progress)
-                    continue
-
-                # Convert to list of dicts for faster iteration
-                stocks_list = []
-                for _, row in stocks_df.iterrows():
-                    code = row.get('代码', '')
-                    if code and len(code) >= 6:
-                        symbol = f"{code}.SH" if code.startswith('6') else f"{code}.SZ"
-                        stocks_list.append({'symbol': symbol, 'code': code})
-
-                this_sector_total = len(stocks_list)
-                processed_count = 0
-                failed_count = 0
-
-                Logger.info(f"process_sector: {sector_name} starting stock processing with {len(stocks_list)} stocks")
-
                 # Process stocks sequentially for real-time UI updates
-                for stock_idx, stock in enumerate(stocks_list):
-                    symbol = stock['symbol']
+                for stock_idx, symbol in enumerate(stocks_list):
+                # Update UI with current processing info
+                stock_name = ""
+                try:
+                    db = DatabaseManager()
+                    thread_storage = StockStorage(db)
+                    stock_info = thread_storage.get_stock(symbol)
+                    if stock_info:
+                        stock_name = stock_info.get('name', '')
+                except:
+                    pass
 
-                    # Update UI with current processing info
-                    stock_name = ""
+                stock_display = f"{symbol}"
+                if stock_name:
+                    stock_display += f" - {stock_name}"
+                stock_status.info(f"处理板块 {sector_name}，股票 {stock_display}")
+                progress_status.info(f"板块进度 {processed_count}/{this_sector_total}")
+
+                # Process stock
+                try:
+                    db = DatabaseManager()
+                    thread_storage = StockStorage(db)
+                    thread_fetcher = DataFetcher()
+                    thread_calculator = IndicatorCalculator()
+
+                    # Process stock - check if today's data already exists
+                    needs_update = True
+                    from datetime import datetime as dt, date as dt_date
+
                     try:
-                        db = DatabaseManager()
-                        thread_storage = StockStorage(db)
                         stock_info = thread_storage.get_stock(symbol)
-                        if stock_info:
-                            stock_name = stock_info.get('name', '')
+                        if stock_info and stock_info.get('updated_at'):
+                            last_update = dt.strptime(stock_info['updated_at'], '%Y-%m-%d %H:%M:%S')
+                            hours_since_update = (dt.now() - last_update).total_seconds() / 3600
+
+                            # Check if today's data already exists in database
+                            today_str = dt.now().strftime('%Y-%m-%d')
+                            has_today_data = thread_storage.has_stock_data_for_date(symbol, today_str)
+
+                            if has_today_data:
+                                # Today's data exists, skip update
+                                needs_update = False
+                            elif hours_since_update < cache_hours:
+                                # Within cache time but no today data, still update
+                                needs_update = True
                     except:
                         pass
 
-                    stock_display = f"{symbol}"
-                    if stock_name:
-                        stock_display += f" - {stock_name}"
-                    stock_status.info(f"处理板块 {sector_name}，股票 {stock_display}")
-                    progress_status.info(f"板块进度 {processed_count}/{this_sector_total}")
+                    if needs_update:
+                        # Get the latest date in database for incremental update
+                        latest_date = thread_storage.get_stock_latest_date(symbol)
+                        if latest_date:
+                            # Convert YYYY-MM-DD to YYYYMMDD and add 1 day
+                            from datetime import timedelta
+                            latest_dt = dt.strptime(latest_date, '%Y-%m-%d')
+                            next_date = (latest_dt + timedelta(days=1)).strftime('%Y%m%d')
+                            stock_start_date = next_date
+                        else:
+                            # No data exists, start from config start date
+                            stock_start_date = start_date
 
-                    # Process stock
-                    try:
-                        db = DatabaseManager()
-                        thread_storage = StockStorage(db)
-                        thread_fetcher = DataFetcher()
-                        thread_calculator = IndicatorCalculator()
-
-                        # Process stock - check if today's data already exists
-                        needs_update = True
-                        from datetime import datetime as dt, date as dt_date
-
-                        try:
-                            stock_info = thread_storage.get_stock(symbol)
-                            if stock_info and stock_info.get('updated_at'):
-                                last_update = dt.strptime(stock_info['updated_at'], '%Y-%m-%d %H:%M:%S')
-                                hours_since_update = (dt.now() - last_update).total_seconds() / 3600
-
-                                # Check if today's data already exists in database
-                                today_str = dt.now().strftime('%Y-%m-%d')
-                                has_today_data = thread_storage.has_stock_data_for_date(symbol, today_str)
-
-                                if has_today_data:
-                                    # Today's data exists, skip update
-                                    needs_update = False
-                                elif hours_since_update < cache_hours:
-                                    # Within cache time but no today data, still update
-                                    needs_update = True
-                        except:
-                            pass
-
-                        if needs_update:
-                            # Get the latest date in database for incremental update
-                            latest_date = thread_storage.get_stock_latest_date(symbol)
-                            if latest_date:
-                                # Convert YYYY-MM-DD to YYYYMMDD and add 1 day
-                                from datetime import timedelta
-                                latest_dt = dt.strptime(latest_date, '%Y-%m-%d')
-                                next_date = (latest_dt + timedelta(days=1)).strftime('%Y%m%d')
-                                stock_start_date = next_date
-                            else:
-                                # No data exists, start from config start date
-                                stock_start_date = start_date
-
-                            history_df = thread_fetcher.get_stock_history(symbol, stock_start_date, end_date)
+                        history_df = thread_fetcher.get_stock_history(symbol, stock_start_date, end_date)
                             if history_df is not None and not history_df.empty:
                                 history_df = thread_calculator.calculate_all(history_df)
                                 # Use incremental save to only insert non-existing records

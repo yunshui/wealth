@@ -2,13 +2,14 @@
 
 import json
 import os
+from typing import List, Dict
 
 
 class Config:
     """Application configuration."""
 
     # Version
-    VERSION = "0.5.11"
+    VERSION = "0.5.12"
 
     # Database
     DB_PATH = 'data/stock_data.db'
@@ -88,6 +89,23 @@ class Config:
             except Exception:
                 pass
         return 4
+
+    @classmethod
+    def get_major_sectors_config(cls) -> List[Dict]:
+        """Get major sectors configuration with stocks list.
+
+        Returns:
+            List of sector configurations with name, type, and stocks
+        """
+        config_file = 'config/MAJOR_SECTORS.json'
+        if os.path.exists(config_file):
+            try:
+                with open(config_file, 'r', encoding='utf-8') as f:
+                    config = json.load(f)
+                    return config.get('sectors', [])
+            except Exception as e:
+                Logger.warning(f"Failed to load major sectors config: {str(e)}")
+        return []
 
     @classmethod
     def get_model_path(cls, model_type: str) -> str:
