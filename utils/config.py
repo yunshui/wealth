@@ -9,7 +9,7 @@ class Config:
     """Application configuration."""
 
     # Version
-    VERSION = "0.5.17"
+    VERSION = "0.5.18"
 
     # Database
     DB_PATH = 'data/stock_data.db'

@@ -54,6 +54,13 @@
    - 改进 None 和空数据的错误处理
    - 在错误信息中包含日期范围信息便于诊断
 
+8. **日志按天记录** (v0.5.18)
+   - 使用 `TimedRotatingFileHandler` 实现日志按天分割
+   - 每天午夜自动轮换日志文件
+   - 保留最近 30 天的日志文件
+   - 旧日志文件使用 `.YYYY-MM-DD` 后缀命名
+   - 方便日志管理和问题追溯
+
 **经验教训**:
 
 1. **配置驱动设计的重要性**
@@ -86,6 +93,7 @@
 - 430ea29: feat: update indicators and model training to use configured stocks (v0.5.15)
 - 395854a: feat: update indicators from config file regardless of DB state (v0.5.16)
 - 7524fd8: fix: improve technical indicators update error handling (v0.5.17)
+- [待提交]: feat: implement daily log rotation for better log management (v0.5.18)
 
 **当前状态**: Stage 1-6 全部完成 ✅
 

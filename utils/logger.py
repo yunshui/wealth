@@ -2,6 +2,7 @@
 
 import logging
 import os
+import logging.handlers
 from utils.config import Config
 
 class Logger:
@@ -42,10 +43,19 @@ class Logger:
             datefmt='%Y-%m-%d %H:%M:%S'
         )
 
-        # File handler
+        # File handler with daily rotation
         os.makedirs(Config.LOG_DIR, exist_ok=True)
         log_file_path = os.path.join(Config.LOG_DIR, Config.LOG_FILE)
-        file_handler = logging.FileHandler(log_file_path, encoding='utf-8')
+
+        # Use TimedRotatingFileHandler for daily rotation
+        file_handler = logging.handlers.TimedRotatingFileHandler(
+            log_file_path,
+            when='midnight',  # Rotate at midnight
+            interval=1,
+            backupCount=30,  # Keep last 30 days of logs
+            encoding='utf-8'
+        )
+        file_handler.suffix = '%Y-%m-%d'  # Log file name suffix with date
         file_handler.setLevel(Config.LOG_LEVEL)
         file_handler.setFormatter(formatter)
         cls._logger.addHandler(file_handler)
