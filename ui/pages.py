@@ -891,6 +891,9 @@ def _update_indicators_data(storage: StockStorage):
         end_date = datetime.now().strftime('%Y%m%d')
         start_date = Config.get_data_start_date().replace('-', '')
 
+        # Create shared fetcher instance to avoid multiple baostock connections
+        shared_fetcher = DataFetcher()
+
         def process_stock(stock: Dict) -> Dict:
             """Process a single stock and return result.
 
@@ -906,8 +909,10 @@ def _update_indicators_data(storage: StockStorage):
             # Use a separate storage instance for each thread
             db = DatabaseManager()
             thread_storage = StockStorage(db)
-            thread_fetcher = DataFetcher()
             thread_calculator = IndicatorCalculator()
+
+            # Use shared fetcher instance
+            thread_fetcher = shared_fetcher
 
             result = {
                 'symbol': stock['symbol'],
@@ -917,6 +922,8 @@ def _update_indicators_data(storage: StockStorage):
             }
 
             try:
+                Logger.info(f"开始处理股票: {stock['symbol']}")
+
                 # Get latest date in database for incremental update
                 latest_date = thread_storage.get_stock_latest_date(stock['symbol'])
                 if latest_date:
@@ -924,14 +931,18 @@ def _update_indicators_data(storage: StockStorage):
                     latest_dt = datetime.strptime(latest_date, '%Y-%m-%d')
                     next_date = (latest_dt + timedelta(days=1)).strftime('%Y%m%d')
                     stock_start_date = next_date
+                    Logger.debug(f"{stock['symbol']}: 最新日期 {latest_date}, 从 {next_date} 开始获取")
                 else:
                     # No data exists, start from config start date
                     stock_start_date = start_date
+                    Logger.debug(f"{stock['symbol']}: 无历史数据，从 {start_date} 开始获取")
 
                 # Fetch data from akshare
                 history_df = thread_fetcher.get_stock_history(stock['symbol'], stock_start_date, end_date)
 
                 if history_df is not None and not history_df.empty:
+                    Logger.info(f"{stock['symbol']}: 获取到 {len(history_df)} 条数据")
+
                     # Calculate indicators
                     df_with_indicators = thread_calculator.calculate_all(history_df)
 
@@ -941,13 +952,24 @@ def _update_indicators_data(storage: StockStorage):
                     if inserted_count > 0:
                         result['success'] = True
                         result['rows_processed'] = inserted_count
+                        Logger.info(f"{stock['symbol']}: 成功插入 {inserted_count} 条新数据")
                     else:
                         # No new data but stock exists
                         result['success'] = True
                         result['rows_processed'] = 0
+                        Logger.info(f"{stock['symbol']}: 无新数据插入（数据已存在）")
+                elif history_df is None:
+                    error_msg = 'API返回None（可能网络连接问题或股票代码无效）'
+                    result['error'] = error_msg
+                    Logger.warning(f"{stock['symbol']}: {error_msg}")
+                else:
+                    error_msg = f'获取数据为空（起始日期: {stock_start_date}, 结束日期: {end_date}）'
+                    result['error'] = error_msg
+                    Logger.warning(f"{stock['symbol']}: {error_msg}")
 
             except Exception as e:
                 result['error'] = str(e)
+                Logger.error(f"{stock['symbol']}: 处理失败 - {str(e)}")
 
             finally:
                 # Update progress safely
@@ -959,7 +981,7 @@ def _update_indicators_data(storage: StockStorage):
             return result
 
         # Process stocks sequentially for better error handling and progress updates
-        max_workers = 4  # Limit concurrent workers to avoid API rate limiting
+        max_workers = 2  # Reduce to 2 to avoid API rate limiting and connection issues
 
         with ThreadPoolExecutor(max_workers=max_workers) as executor:
             # Submit all tasks
