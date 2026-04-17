@@ -47,6 +47,13 @@
    - 自动更新 `updated_at` 时间戳
    - 显示详细的成功/失败统计
 
+7. **技术指标更新错误处理优化** (v0.5.17)
+   - 减少并发工作线程数（4 → 2）避免 API 速率限制
+   - 使用共享 DataFetcher 实例防止多 baostock 连接冲突
+   - 添加详细错误消息和日志记录
+   - 改进 None 和空数据的错误处理
+   - 在错误信息中包含日期范围信息便于诊断
+
 **经验教训**:
 
 1. **配置驱动设计的重要性**
@@ -64,6 +71,12 @@
    - 记录失败原因，方便排查问题
    - 实时进度更新，提升用户体验
 
+4. **并发和资源管理**
+   - 避免多个 API 连接实例冲突（如 baostock）
+   - 使用共享数据源实例处理并发请求
+   - 适当降低并发数以避免 API 速率限制
+   - 添加详细日志记录便于问题诊断
+
 **Commits**:
 - a8273a9: feat: implement true incremental stock data update (v0.5.11)
 - ffd6e8c: feat: add stocks configuration for targeted updates (v0.5.12)
@@ -72,6 +85,7 @@
 - f5734d3: feat: update sector data logic to use config file directly (v0.5.14)
 - 430ea29: feat: update indicators and model training to use configured stocks (v0.5.15)
 - 395854a: feat: update indicators from config file regardless of DB state (v0.5.16)
+- 7524fd8: fix: improve technical indicators update error handling (v0.5.17)
 
 **当前状态**: Stage 1-6 全部完成 ✅
 
