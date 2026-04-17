@@ -109,6 +109,7 @@
 - 7524fd8: fix: improve technical indicators update error handling (v0.5.17)
 - 2394e23: feat: implement daily log rotation for better log management (v0.5.18)
 - f57202f: fix: handle Chinese column names from akshare API (v0.5.19)
+- e517bc2: fix: improve technical indicators update logic for existing data (v0.5.20)
 
 **当前状态**: Stage 1-6 全部完成 ✅
 
