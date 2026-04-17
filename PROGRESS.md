@@ -101,7 +101,7 @@
 - 395854a: feat: update indicators from config file regardless of DB state (v0.5.16)
 - 7524fd8: fix: improve technical indicators update error handling (v0.5.17)
 - 2394e23: feat: implement daily log rotation for better log management (v0.5.18)
-- [待提交]: fix: handle Chinese column names from akshare API (v0.5.19)
+- f57202f: fix: handle Chinese column names from akshare API (v0.5.19)
 
 **当前状态**: Stage 1-6 全部完成 ✅
 
