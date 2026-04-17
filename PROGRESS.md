@@ -93,7 +93,7 @@
 - 430ea29: feat: update indicators and model training to use configured stocks (v0.5.15)
 - 395854a: feat: update indicators from config file regardless of DB state (v0.5.16)
 - 7524fd8: fix: improve technical indicators update error handling (v0.5.17)
-- [待提交]: feat: implement daily log rotation for better log management (v0.5.18)
+- 2394e23: feat: implement daily log rotation for better log management (v0.5.18)
 
 **当前状态**: Stage 1-6 全部完成 ✅
 
