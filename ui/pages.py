@@ -833,29 +833,50 @@ def _update_stocks_data(storage: StockStorage):
 
 
 def _update_indicators_data(storage: StockStorage):
-    """Update technical indicators for all stocks using parallel processing.
+    """Update technical indicators for configured stocks.
 
     Args:
         storage: StockStorage instance for data operations
     """
     from analysis.indicators import IndicatorCalculator
+    from utils.config import Config
+    import json
 
     update_placeholder = st.empty()
     progress_placeholder = st.empty()
 
     try:
-        # Get all stocks
-        update_placeholder.info("正在获取股票列表...")
-        stocks = storage.get_stock_list()
+        # Load sectors configuration from config file
+        update_placeholder.info("正在读取配置文件...")
+        sectors_config = Config.get_major_sectors_config()
 
-        if not stocks:
+        if not sectors_config:
+            st.warning("配置文件中没有板块数据，请检查 config/MAJOR_SECTORS.json")
+            return
+
+        # Collect all unique stocks from config
+        stock_symbols = set()
+        for sector_config in sectors_config:
+            stocks = sector_config.get('stocks', [])
+            stock_symbols.update(stocks)
+
+        # Convert to list of stock dictionaries
+        stocks_list = []
+        for symbol in stock_symbols:
+            stock_info = storage.get_stock(symbol)
+            if stock_info:
+                stocks_list.append(stock_info)
+
+        if not stocks_list:
             st.warning("暂无股票数据，请先更新板块和股票数据")
             return
+
+        update_placeholder.info(f"正在更新 {len(stocks_list)} 只配置股票的技术指标...")
 
         # Thread-safe counters
         total_lock = threading.Lock()
         processed_count = 0
-        total = len(stocks)
+        total = len(stocks_list)
 
         def process_stock(stock: Dict) -> int:
             """Process a single stock and return count of rows updated.
@@ -904,7 +925,7 @@ def _update_indicators_data(storage: StockStorage):
 
         with ThreadPoolExecutor(max_workers=max_workers) as executor:
             # Submit all tasks
-            futures = {executor.submit(process_stock, stock): stock for stock in stocks}
+            futures = {executor.submit(process_stock, stock): stock for stock in stocks_list}
 
             # Process completed tasks and update progress
             for future in as_completed(futures):
@@ -923,7 +944,7 @@ def _update_indicators_data(storage: StockStorage):
 
 
 def _train_models(storage: StockStorage):
-    """Train all prediction models using available historical data.
+    """Train prediction models using configured stocks.
 
     Args:
         storage: StockStorage instance for fetching training data
@@ -933,9 +954,27 @@ def _train_models(storage: StockStorage):
     import json
     import os
     import pandas as pd
+    from utils.config import Config
 
-    # Check available stocks
-    stocks = storage.get_stock_list()
+    # Load configured stocks from config file
+    sectors_config = Config.get_major_sectors_config()
+
+    if not sectors_config:
+        st.warning("配置文件中没有板块数据，请检查 config/MAJOR_SECTORS.json")
+        return
+
+    # Collect all unique stocks from config
+    stock_symbols = set()
+    for sector_config in sectors_config:
+        stocks = sector_config.get('stocks', [])
+        stock_symbols.update(stocks)
+
+    # Convert to list of stock dictionaries
+    stocks = []
+    for symbol in stock_symbols:
+        stock_info = storage.get_stock(symbol)
+        if stock_info:
+            stocks.append(stock_info)
 
     if not stocks:
         st.error("❌ 数据库中没有股票数据，请先更新板块数据")
@@ -943,7 +982,7 @@ def _train_models(storage: StockStorage):
 
     # Check data availability - sample a few stocks
     total_stocks = len(stocks)
-    st.info(f"📊 检测到 {total_stocks} 只股票，检查历史数据...")
+    st.info(f"📊 检测到 {total_stocks} 只配置股票，检查历史数据...")
 
     # Sample check: test first 5 stocks
     sample_stocks = stocks[:min(5, len(stocks))]
@@ -968,8 +1007,8 @@ def _train_models(storage: StockStorage):
         2. 点击 **"🔄 更新股票数据"** 获取历史交易数据（首次可能需要较长时间）
         3. 等待数据更新完成后，再点击 **"🧠 训练预测模型"**
 
-        **注意：** 首次更新股票数据需要从 akshare API 获取约7年的历史数据，
-        涉及5000多只股票，可能需要30分钟到1小时，请耐心等待。
+        **注意：** 首次更新股票数据需要从 akshare API 获取历史数据，
+        涉及配置的股票，请耐心等待。
         """)
         return
 
