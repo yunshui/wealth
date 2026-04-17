@@ -833,14 +833,17 @@ def _update_stocks_data(storage: StockStorage):
 
 
 def _update_indicators_data(storage: StockStorage):
-    """Update technical indicators for configured stocks.
+    """Update technical indicators for configured stocks from config file.
 
     Args:
         storage: StockStorage instance for data operations
     """
     from analysis.indicators import IndicatorCalculator
+    from data.fetcher import DataFetcher
     from utils.config import Config
     import json
+    from datetime import datetime
+    from datetime import timedelta
 
     update_placeholder = st.empty()
     progress_placeholder = st.empty()
@@ -860,15 +863,20 @@ def _update_indicators_data(storage: StockStorage):
             stocks = sector_config.get('stocks', [])
             stock_symbols.update(stocks)
 
-        # Convert to list of stock dictionaries
+        # Convert to list of stock dictionaries (all from config, regardless of DB state)
         stocks_list = []
         for symbol in stock_symbols:
-            stock_info = storage.get_stock(symbol)
-            if stock_info:
-                stocks_list.append(stock_info)
+            stock_info = {
+                'symbol': symbol,
+                'name': f'股票{symbol}',
+                'industry': None,
+                'sector': None,
+                'market_cap': None
+            }
+            stocks_list.append(stock_info)
 
         if not stocks_list:
-            st.warning("暂无股票数据，请先更新板块和股票数据")
+            st.warning("配置文件中没有股票数据")
             return
 
         update_placeholder.info(f"正在更新 {len(stocks_list)} 只配置股票的技术指标...")
@@ -876,52 +884,82 @@ def _update_indicators_data(storage: StockStorage):
         # Thread-safe counters
         total_lock = threading.Lock()
         processed_count = 0
+        failed_count = 0
         total = len(stocks_list)
 
-        def process_stock(stock: Dict) -> int:
-            """Process a single stock and return count of rows updated.
+        # Get date range from config
+        end_date = datetime.now().strftime('%Y%m%d')
+        start_date = Config.get_data_start_date().replace('-', '')
+
+        def process_stock(stock: Dict) -> Dict:
+            """Process a single stock and return result.
 
             Args:
                 stock: Stock dictionary
 
             Returns:
-                Number of rows processed
+                Result dictionary with status and info
             """
             nonlocal processed_count
+            nonlocal failed_count
 
             # Use a separate storage instance for each thread
             db = DatabaseManager()
             thread_storage = StockStorage(db)
+            thread_fetcher = DataFetcher()
             thread_calculator = IndicatorCalculator()
 
-            rows_processed = 0
+            result = {
+                'symbol': stock['symbol'],
+                'success': False,
+                'rows_processed': 0,
+                'error': None
+            }
 
             try:
-                # Get historical data
-                df = thread_storage.get_stock_data(stock['symbol'])
+                # Get latest date in database for incremental update
+                latest_date = thread_storage.get_stock_latest_date(stock['symbol'])
+                if latest_date:
+                    # Convert YYYY-MM-DD to YYYYMMDD and add 1 day
+                    latest_dt = datetime.strptime(latest_date, '%Y-%m-%d')
+                    next_date = (latest_dt + timedelta(days=1)).strftime('%Y%m%d')
+                    stock_start_date = next_date
+                else:
+                    # No data exists, start from config start date
+                    stock_start_date = start_date
 
-                if not df.empty:
+                # Fetch data from akshare
+                history_df = thread_fetcher.get_stock_history(stock['symbol'], stock_start_date, end_date)
+
+                if history_df is not None and not history_df.empty:
                     # Calculate indicators
-                    df_with_indicators = thread_calculator.calculate_all(df)
+                    df_with_indicators = thread_calculator.calculate_all(history_df)
 
-                    # Save updated data
-                    for _, row in df_with_indicators.iterrows():
-                        thread_storage.save_stock_data(row.to_dict())
-                        rows_processed += 1
+                    # Save updated data with current timestamp
+                    inserted_count = thread_storage.save_stock_data_incremental(df_with_indicators)
 
-            except Exception:
-                pass
+                    if inserted_count > 0:
+                        result['success'] = True
+                        result['rows_processed'] = inserted_count
+                    else:
+                        # No new data but stock exists
+                        result['success'] = True
+                        result['rows_processed'] = 0
+
+            except Exception as e:
+                result['error'] = str(e)
 
             finally:
                 # Update progress safely
                 with total_lock:
-                    nonlocal processed_count
                     processed_count += 1
+                    if not result['success']:
+                        failed_count += 1
 
-            return rows_processed
+            return result
 
-        # Process stocks in parallel
-        max_workers = min(16, total)  # Limit to 16 concurrent workers
+        # Process stocks sequentially for better error handling and progress updates
+        max_workers = 4  # Limit concurrent workers to avoid API rate limiting
 
         with ThreadPoolExecutor(max_workers=max_workers) as executor:
             # Submit all tasks
@@ -931,13 +969,19 @@ def _update_indicators_data(storage: StockStorage):
             for future in as_completed(futures):
                 stock = futures[future]
                 try:
-                    future.result()
+                    result = future.result()
                     # Update progress display
-                    progress_placeholder.info(f"进度: {processed_count}/{total} 只股票")
-                except Exception:
-                    pass
+                    if result['success']:
+                        progress_placeholder.info(f"进度: {processed_count}/{total} 只股票 (成功: {processed_count - failed_count}, 失败: {failed_count})")
+                    else:
+                        progress_placeholder.warning(f"进度: {processed_count}/{total} 只股票 (成功: {processed_count - failed_count}, 失败: {failed_count}) - {stock['symbol']}: {result.get('error', '未知错误')}")
+                except Exception as e:
+                    progress_placeholder.error(f"进度: {processed_count}/{total} 只股票 - {stock['symbol']}: 处理异常: {str(e)}")
 
-        st.success(f"✅ 技术指标更新完成! 共处理 {processed_count} 只股票")
+        if failed_count == 0:
+            st.success(f"✅ 技术指标更新完成! 共处理 {processed_count} 只股票")
+        else:
+            st.warning(f"⚠️ 技术指标更新完成! 共处理 {processed_count} 只股票, 失败 {failed_count} 只")
 
     except Exception as e:
         st.error(f"更新失败: {str(e)}")
@@ -972,9 +1016,21 @@ def _train_models(storage: StockStorage):
     # Convert to list of stock dictionaries
     stocks = []
     for symbol in stock_symbols:
-        stock_info = storage.get_stock(symbol)
-        if stock_info:
-            stocks.append(stock_info)
+        # Check if stock has data in stock_data table
+        try:
+            df = storage.get_stock_data(symbol)
+            if not df.empty:
+                # Create stock dictionary with minimal required fields
+                stock_info = {
+                    'symbol': symbol,
+                    'name': f'股票{symbol}',  # Placeholder name
+                    'industry': None,
+                    'sector': None,
+                    'market_cap': None
+                }
+                stocks.append(stock_info)
+        except Exception:
+            pass
 
     if not stocks:
         st.error("❌ 数据库中没有股票数据，请先更新板块数据")
