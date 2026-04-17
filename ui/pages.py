@@ -942,22 +942,31 @@ def _update_indicators_data(storage: StockStorage):
 
                 if history_df is not None and not history_df.empty:
                     Logger.info(f"{stock['symbol']}: 获取到 {len(history_df)} 条数据")
+                    Logger.debug(f"{stock['symbol']}: 数据列: {list(history_df.columns)}")
 
-                    # Calculate indicators
-                    df_with_indicators = thread_calculator.calculate_all(history_df)
-
-                    # Save updated data with current timestamp
-                    inserted_count = thread_storage.save_stock_data_incremental(df_with_indicators)
-
-                    if inserted_count > 0:
-                        result['success'] = True
-                        result['rows_processed'] = inserted_count
-                        Logger.info(f"{stock['symbol']}: 成功插入 {inserted_count} 条新数据")
+                    # Validate required columns
+                    required_columns = ['date', 'symbol', 'open', 'high', 'low', 'close']
+                    missing_columns = [col for col in required_columns if col not in history_df.columns]
+                    if missing_columns:
+                        error_msg = f"数据缺少必需列: {missing_columns}"
+                        result['error'] = error_msg
+                        Logger.warning(f"{stock['symbol']}: {error_msg}, 实际列: {list(history_df.columns)}")
                     else:
-                        # No new data but stock exists
-                        result['success'] = True
-                        result['rows_processed'] = 0
-                        Logger.info(f"{stock['symbol']}: 无新数据插入（数据已存在）")
+                        # Calculate indicators
+                        df_with_indicators = thread_calculator.calculate_all(history_df)
+
+                        # Save updated data with current timestamp
+                        inserted_count = thread_storage.save_stock_data_incremental(df_with_indicators)
+
+                        if inserted_count > 0:
+                            result['success'] = True
+                            result['rows_processed'] = inserted_count
+                            Logger.info(f"{stock['symbol']}: 成功插入 {inserted_count} 条新数据")
+                        else:
+                            # No new data but stock exists
+                            result['success'] = True
+                            result['rows_processed'] = 0
+                            Logger.info(f"{stock['symbol']}: 无新数据插入（数据已存在）")
                 elif history_df is None:
                     error_msg = 'API返回None（可能网络连接问题或股票代码无效）'
                     result['error'] = error_msg

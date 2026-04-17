@@ -13,6 +13,19 @@ from utils.cache import CacheManager
 # Cache expiration constants
 LATEST_DATA_CACHE_EXPIRE = 60  # Cache latest data for 60 seconds
 
+# Column name mapping for Chinese to English conversion
+COLUMN_MAPPING = {
+    '日期': 'date',
+    '股票代码': 'symbol',
+    '开盘': 'open',
+    '收盘': 'close',
+    '最高': 'high',
+    '最低': 'low',
+    '成交量': 'volume',
+    '成交额': 'amount',
+    '日期': 'date'
+}
+
 
 class DataFetcher:
     """Data fetcher for stock market data using akshare API with baostock fallback."""
@@ -207,6 +220,14 @@ class DataFetcher:
                 adjust="hfq",  # 前复权
                 cache_key=cache_key
             )
+
+            # Check and convert column names if they are in Chinese
+            if df is not None and not df.empty:
+                if '日期' in df.columns:
+                    # Convert Chinese column names to English
+                    df = df.rename(columns=COLUMN_MAPPING)
+                    Logger.debug(f"Converted Chinese column names to English for {symbol}")
+
             return df
         except Exception as e:
             Logger.warning(f"akshare API failed for stock history: {str(e)}")

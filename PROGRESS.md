@@ -61,6 +61,13 @@
    - 旧日志文件使用 `.YYYY-MM-DD` 后缀命名
    - 方便日志管理和问题追溯
 
+9. **技术指标更新中文列名修复** (v0.5.19)
+   - 修复 akshare API 返回中文列名的问题
+   - 添加 COLUMN_MAPPING 映射，自动转换中英文列名
+   - 添加数据列验证，确保必需列存在
+   - 改进错误日志，包含实际列名信息
+   - 解决 83 只股票更新失败的问题
+
 **经验教训**:
 
 1. **配置驱动设计的重要性**
@@ -94,6 +101,7 @@
 - 395854a: feat: update indicators from config file regardless of DB state (v0.5.16)
 - 7524fd8: fix: improve technical indicators update error handling (v0.5.17)
 - 2394e23: feat: implement daily log rotation for better log management (v0.5.18)
+- [待提交]: fix: handle Chinese column names from akshare API (v0.5.19)
 
 **当前状态**: Stage 1-6 全部完成 ✅
 
