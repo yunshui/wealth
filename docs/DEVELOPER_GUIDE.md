@@ -62,6 +62,9 @@ wealth/
 │   ├── helpers.py               # 辅助函数
 │   ├── cache.py                 # 缓存管理
 │   └── error_handler.py         # 错误处理
+├── config/                      # 配置文件目录
+│   ├── MAJOR_SECTORS.json       # 主要板块和龙头股配置
+│   └── data_config.json         # 数据配置（起始日期、缓存时间等）
 ├── models/                      # 预训练模型目录
 ├── data/                        # 数据文件目录
 │   ├── cache/                   # 缓存目录
@@ -124,6 +127,46 @@ pip install -r requirements.txt
 
 ### 4. 配置
 
+#### 配置文件说明
+
+**config/MAJOR_SECTORS.json** - 板块和龙头股配置
+```json
+{
+  "sectors": [
+    {
+      "name": "银行",
+      "type": "industry",
+      "stocks": ["600036.SH", "601398.SH", "600000.SH"]
+    }
+  ]
+}
+```
+
+**config/data_config.json** - 数据配置
+```json
+{
+  "data": {
+    "start_date": "2025-01-01",
+    "update_cache_hours": 4
+  }
+}
+```
+
+#### 读取配置
+
+```python
+from utils.config import Config
+
+# 获取数据起始日期
+start_date = Config.get_data_start_date()
+
+# 获取板块配置
+sectors_config = Config.get_major_sectors_config()
+
+# 获取版本号
+version = Config.VERSION
+```
+
 编辑 `utils/config.py` 修改配置：
 
 ```python
@@ -136,6 +179,61 @@ CACHE_DIR = "data/cache"
 ---
 
 ## 开发指南
+
+### 配置驱动开发模式
+
+**重要原则**：
+- 配置文件作为单一真实来源（Single Source of Truth）
+- 业务逻辑与数据状态解耦
+- 避免硬编码，使用配置管理
+
+```python
+# ✅ 推荐：从配置读取
+sectors_config = Config.get_major_sectors_config()
+for sector in sectors_config:
+    process_sector(sector)
+
+# ❌ 不推荐：硬编码或依赖数据库状态
+sectors = storage.get_all_sectors()  # 可能为空或不完整
+```
+
+### 数据获取最佳实践
+
+**1. 使用串行处理避免 API 限流**
+```python
+# ✅ 推荐：串行处理 + 延迟
+for stock in stocks_list:
+    result = fetcher.get_stock_data(stock)
+    time.sleep(0.5)  # 添加延迟
+
+# ❌ 不推荐：并发处理（触发限流）
+with ThreadPoolExecutor(max_workers=2) as executor:
+    results = executor.map(fetcher.get_stock_data, stocks_list)
+```
+
+**2. 实现增量更新**
+```python
+# 获取最新日期，只获取缺失数据
+latest_date = storage.get_stock_latest_date(symbol)
+if latest_date:
+    next_date = (latest_date + timedelta(days=1)).strftime('%Y%m%d')
+else:
+    next_date = Config.get_data_start_date()
+
+# 检查是否需要更新
+if int(next_date) <= int(today):
+    df = fetcher.get_stock_history(symbol, next_date, today)
+```
+
+**3. 备用数据源**
+```python
+try:
+    # 优先使用主数据源
+    df = fetcher.get_stock_history(symbol, start, end)
+except Exception:
+    # 失败时使用备用数据源
+    df = fetcher._get_stock_history_baostock(symbol, start, end)
+```
 
 ### 代码规范
 
@@ -159,6 +257,14 @@ Logger.info("一般信息")
 Logger.warning("警告信息")
 Logger.error("错误信息")
 ```
+
+**日志格式**：
+```
+2026-04-20 10:00:00 - wealth - INFO - fetcher.py:123 - 获取股票数据
+2026-04-20 10:00:01 - wealth - ERROR - pages.py:456 - 数据获取失败
+```
+
+日志格式包含：时间 - logger名称 - 级别 - 文件名:行号 - 消息
 
 ### 错误处理
 
@@ -487,11 +593,41 @@ A: 在 `prediction/ensemble.py` 中修改 `DEFAULT_WEIGHTS` 字典。
 
 ### Q: 如何添加新的板块？
 
-A: 系统会自动从akshare获取所有板块，无需手动添加。
+A: 编辑 `config/MAJOR_SECTORS.json` 文件，添加新的板块配置：
 
-### Q: 数据库太大怎么办？
+```json
+{
+  "name": "新板块",
+  "type": "industry",
+  "stocks": ["600xxx.SH", "000xxx.SZ"]
+}
+```
 
-A: 可以定期清理旧数据，或考虑使用MySQL/PostgreSQL替代SQLite。
+系统会基于配置文件进行数据处理，无需手动操作数据库。
+
+### Q: 如何处理 akshare API 限流？
+
+A:
+1. 使用串行处理而非并发
+2. 在每个请求之间添加延迟（如 0.5 秒）
+3. 使用 baostock 作为备用数据源
+4. 实现增量更新，减少请求次数
+
+### Q: 股票数据更新失败怎么办？
+
+A:
+1. 检查网络连接
+2. 查看日志 `logs/app.log` 获取详细错误信息
+3. 尝试手动重试（可能是临时问题）
+4. 检查 `config/MAJOR_SECTORS.json` 中股票代码是否正确
+
+### Q: 如何查看详细的错误日志？
+
+A: 日志格式包含文件名和行号，便于快速定位：
+```bash
+tail -f logs/app.log | grep ERROR
+```
+输出示例：`2026-04-20 10:00:00 - wealth - ERROR - pages.py:456 - 错误信息`
 
 ---
 

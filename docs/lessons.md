@@ -809,3 +809,283 @@ if st.session_state.refresh_requested:
 - 使用版本控制跟踪问题和解决方案
 - 建立问题追踪系统
 - 定期审查代码，识别潜在问题
+
+---
+
+# 第四部分：近期开发经验 (2026-04)
+
+## 21. akshare API 速率限制和连接问题
+
+### 问题
+```python
+# 严重问题：大量 API 请求失败
+WARNING - API call failed (attempt 3/3): ('Connection aborted.', RemoteDisconnected('Remote end closed connection without response'))
+WARNING - akshare API failed for stock history: [E0001] API call failed after 3 retries
+```
+
+### 原因
+- 并发请求过多，API 服务器主动断开连接
+- 请求间隔过短，触发速率限制
+- akshare 没有官方的速率限制文档
+
+### 解决方案
+```python
+# 方案1：改用串行处理
+# 从 ThreadPoolExecutor(max_workers=2) 改为串行
+for stock in stocks_list:
+    # 处理单个股票
+    result = process_single_stock(stock)
+    # 添加延迟避免速率限制
+    time.sleep(0.5)
+
+# 方案2：使用 baostock 作为备用数据源
+def get_stock_history(symbol, start_date, end_date):
+    try:
+        return akshare_api_call(symbol, start_date, end_date)
+    except Exception:
+        # akshare 失败时使用 baostock
+        return baostock_api_call(symbol, start_date, end_date)
+```
+
+### 经验教训
+- 免费数据源通常有隐形的速率限制
+- 即使使用 `max_workers=2`，短时间内大量请求仍会被限流
+- 准备备用数据源很重要（如 baostock）
+- 在每个请求之间添加适当延迟（如 0.5 秒）
+- 串行处理比并发处理更稳定（对于数据获取场景）
+
+## 22. baostock 空数据处理（非交易日）
+
+### 问题
+```python
+# baostock 返回空数据被错误标记为失败
+WARNING - baostock returned empty data for 600570.SH
+WARNING - 600570.SH: 获取数据为空（起始日期: 20260418, 结束日期: 20260420）
+# 进度显示：失败 39 只
+```
+
+### 原因
+- 请求的日期范围只包含非交易日（周末、节假日）
+- baostock 数据同步延迟
+- 系统将正常情况标记为失败
+
+### 解决方案
+```python
+# 检查日期范围大小
+if history_df.empty:
+    start_dt = datetime.strptime(stock_start_date, '%Y%m%d')
+    end_dt = datetime.strptime(end_date, '%Y%m%d')
+    days_range = (end_dt - start_dt).days + 1
+
+    # 如果日期范围 <= 5 天，标记为成功
+    if days_range <= 5:
+        result['success'] = True
+        Logger.info(f"{symbol}: 请求日期范围较小（{days_range}天），可能为非交易日")
+    else:
+        result['success'] = False
+        result['error'] = '获取数据为空'
+```
+
+### 经验教训
+- 空数据不一定意味着错误
+- 非交易日是常见情况，不应标记为失败
+- 使用日期范围判断数据空缺的合理性
+- 提供友好的日志信息说明原因
+- 避免过度失败，提高用户体验
+
+## 23. 日志格式增强提升调试效率
+
+### 问题
+```python
+# 原日志格式难以定位错误来源
+2026-04-20 10:00:00 - wealth - ERROR - 获取数据为空（起始日期: 20260418, 结束日期: 20260420）
+```
+
+### 原因
+- 缺少文件名和行号信息
+- 错误出现时需要手动搜索代码定位
+- 调试效率低
+
+### 解决方案
+```python
+# utils/logger.py
+formatter = logging.Formatter(
+    '%(asctime)s - %(name)s - %(levelname)s - %(filename)s:%(lineno)d - %(message)s',
+    datefmt='%Y-%m-%d %H:%M:%S'
+)
+
+# 新日志格式
+2026-04-20 10:00:00 - wealth - WARNING - pages.py:956 - 600570.SH: 获取数据为空
+```
+
+### 经验教训
+- 日志格式应包含足够的定位信息
+- `filename:lineno` 帮助快速定位错误
+- 调试时间大幅减少
+- 使用 Python logging 标准格式化变量
+
+## 24. 中文列名自动转换
+
+### 问题
+```python
+# akshare API 返回中文列名
+KeyError: 'close'  # 实际列名是 '收盘'
+```
+
+### 原因
+- akshare API 可能返回中文列名
+- 代码硬编码使用英文列名
+- API 行为不稳定
+
+### 解决方案
+```python
+# data/fetcher.py
+COLUMN_MAPPING = {
+    '日期': 'date',
+    '股票代码': 'symbol',
+    '开盘': 'open',
+    '收盘': 'close',
+    '最高': 'high',
+    '最低': 'low',
+    '成交量': 'volume',
+    '成交额': 'amount'
+}
+
+def get_stock_history(symbol, start_date, end_date):
+    df = ak.stock_zh_a_hist(...)
+    if '日期' in df.columns:
+        df = df.rename(columns=COLUMN_MAPPING)
+    return df
+```
+
+### 经验教训
+- 免费数据源的 API 行为不稳定
+- 自动检测和转换列名很重要
+- 使用列名映射字典提高兼容性
+- 记录日志便于调试列名问题
+
+## 25. 配置驱动设计的重要性
+
+### 问题
+```python
+# 数据库驱动的问题
+# 1. 板块数据缺失导致功能异常
+# 2. 数据更新失败影响后续处理
+# 3. 难以维护和调整
+```
+
+### 解决方案
+```python
+# config/MAJOR_SECTORS.json
+{
+  "sectors": [
+    {
+      "name": "银行",
+      "type": "industry",
+      "stocks": ["600036.SH", "601398.SH", ...]
+    }
+  ]
+}
+
+# 读取配置
+sectors_config = Config.get_major_sectors_config()
+# 只处理配置的股票
+for sector in sectors_config:
+    for stock in sector['stocks']:
+        process_stock(stock)
+```
+
+### 经验教训
+- 配置文件作为单一真实来源（Single Source of Truth）
+- 业务逻辑与数据状态解耦
+- 便于维护和调整
+- 避免因数据缺失导致功能异常
+- 配置文件应包含所有必需信息
+
+## 26. 串行处理 vs 并发处理
+
+### 问题
+```python
+# 并发处理的问题
+# 1. API 速率限制
+# 2. 连接冲突（如 baostock）
+# 3. 错误难以追踪
+```
+
+### 对比分析
+
+| 方面 | 并发处理 | 串行处理 |
+|------|---------|---------|
+| 速度 | 快（理论值） | 慢（但稳定） |
+| 稳定性 | 低（易触发限流） | 高（可控） |
+| 错误追踪 | 困难（多线程） | 简单（线性） |
+| 适用场景 | 数据量小且API稳定 | 数据获取、外部API调用 |
+
+### 经验教训
+- 数据获取场景：串行处理更稳定
+- 并发处理只适用于内部计算任务
+- 添加请求延迟避免速率限制
+- 稳定性 > 速度（对于数据获取）
+
+## 27. 增量更新 vs 全量更新
+
+### 问题
+```python
+# 全量更新的问题
+# 1. 每次获取所有历史数据
+# 2. 网络请求过多
+# 3. 更新时间长
+```
+
+### 解决方案
+```python
+# 增量更新
+latest_date = storage.get_stock_latest_date(symbol)
+if latest_date:
+    next_date = (latest_date + timedelta(days=1)).strftime('%Y%m%d')
+else:
+    next_date = Config.get_data_start_date()
+
+# 只获取缺失的数据
+history_df = fetcher.get_stock_history(symbol, next_date, today)
+```
+
+### 经验教训
+- 只获取缺失的数据，大幅减少请求
+- 使用 `get_stock_latest_date()` 获取最新日期
+- 检查 `start_date > end_date` 避免无效请求
+- 大幅提升更新速度和稳定性
+
+---
+
+# 总结更新
+
+## 新增最佳实践（2026-04）
+
+### 数据获取
+1. 使用串行处理避免 API 速率限制
+2. 每个请求之间添加适当延迟
+3. 准备备用数据源（如 baostock）
+4. 实现增量更新，只获取缺失数据
+5. 自动检测和转换中文列名
+
+### 错误处理
+1. 空数据不一定意味着错误
+2. 使用日期范围判断数据空缺的合理性
+3. 非交易日应标记为成功而非失败
+4. 提供友好的错误提示信息
+
+### 日志管理
+1. 日志格式包含文件名和行号
+2. 使用 Python logging 标准格式化变量
+3. 提升调试效率
+
+### 架构设计
+1. 配置文件作为单一真实来源
+2. 业务逻辑与数据状态解耦
+3. 配置文件应包含所有必需信息
+
+### 性能优化
+1. 稳定性 > 速度（对于数据获取）
+2. 串行处理适合数据获取场景
+3. 增量更新大幅提升效率

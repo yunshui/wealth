@@ -6,7 +6,8 @@
 | 层级 | 技术选型 | 用途 |
 |------|---------|------|
 | 数据层 | SQLite | 本地数据存储 |
-| 数据获取 | akshare | A股数据API |
+| 数据获取 | akshare | A股数据API（主数据源） |
+| 数据获取 | baostock | A股数据API（备用数据源） |
 | 后端逻辑 | Python 3.10+ | 核心业务逻辑 |
 | 数据处理 | pandas, numpy | 数据分析处理 |
 | 技术指标 | pandas-ta | 技术指标计算 |
@@ -18,7 +19,8 @@
 ### 1.2 技术选型理由
 - **Python**：生态丰富，有成熟的金融库和机器学习库
 - **Streamlit**：开发快速，适合数据应用，可本地运行
-- **akshare**：免费开源的A股数据源，数据全面
+- **akshare**：免费开源的A股数据源，数据全面（主数据源）
+- **baostock**：免费开源的A股数据源，作为 akshare 备用（备用数据源）
 - **SQLite**：无需额外安装，满足本地存储需求
 - **scikit-learn**：成熟稳定的机器学习库，适合快速实现
 
@@ -58,8 +60,58 @@ ak.stock_individual_info_em(symbol="股票代码")
 
 **注意事项**：
 - akshare依赖网络请求，需要稳定网络环境
-- 部分API可能有频率限制
+- 部分API可能有频率限制，建议串行处理并添加延迟
 - 数据格式可能随时间变化，需要版本兼容
+- 作为主数据源，当失败时自动切换到 baostock
+
+---
+
+### 2.1.2 baostock（备用数据获取）
+
+**版本要求**：>= 0.8.8
+
+**主要功能**：
+- 获取A股历史行情数据
+- 作为 akshare 的备用数据源
+- 支持 k 线数据查询
+- 数据前复权处理
+
+**常用API**：
+```python
+import baostock as bs
+
+# 登录系统
+bs.login()
+
+# 获取股票历史K线数据
+rs = bs.query_history_k_data_plus(
+    "sh.600000",  # 股票代码
+    "date,code,open,high,low,close,volume,amount",
+    start_date="2018-01-01",
+    end_date="2023-12-31",
+    frequency="d",  # 日线
+    adjustflag="1"  # 前复权
+)
+
+# 登出系统
+bs.logout()
+```
+
+**注意事项**：
+- baostock 数据可能有延迟
+- 需要先登录后查询
+- 股票代码格式：sh.600000 或 sz.000001
+- 作为备用数据源，只在 akshare 失败时使用
+
+**数据切换逻辑**：
+```python
+try:
+    # 优先使用 akshare
+    df = ak.stock_zh_a_hist(symbol, start_date, end_date)
+except Exception:
+    # 失败时切换到 baostock
+    df = baostock_query_history(symbol, start_date, end_date)
+```
 
 ---
 
