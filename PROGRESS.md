@@ -194,6 +194,7 @@
 - 7a2f5e8: feat: add async stock loading for sector detail page (v0.5.27)
 - 9b3c2d1: fix: implement non-blocking progressive stock loading with batch processing (v0.5.28)
 - 1d8f4e3: fix: fallback to sector_leaders table when stock info missing in stocks table (v0.5.29)
+- 3a2b1c5: fix: fix st.columns unpacking error in stock detail page (v0.5.30)
 
 **当前状态**: Stage 1-6 全部完成 ✅
 

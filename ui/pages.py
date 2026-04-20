@@ -412,7 +412,7 @@ def show_stock_detail():
         # Check if stock info is from sector_leaders (incomplete)
         from_sector_leaders = stock.get('from_sector_leaders', False)
         if from_sector_leaders:
-            col1, col2, col3 = st.columns([2, 1])
+            col1, col2 = st.columns([2, 1])
             with col1:
                 st.warning(f"⚠️ 股票 {symbol} 的基本信息未加载，请先在首页点击「加载股票」按钮获取完整信息")
             with col2:
