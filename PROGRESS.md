@@ -83,6 +83,12 @@
     - 如果日期范围 ≤ 5 天，标记为成功（可能为非交易日或数据延迟）
     - 避免将正常情况标记为失败
     - 提高更新成功率和用户体验
+
+13. **日志格式增强** (v0.5.23)
+    - 添加文件名和行号到日志格式
+    - 格式：`YYYY-MM-DD HH:MM:SS - wealth - LEVEL - filename:lineno - message`
+    - 方便快速定位错误来源
+    - 提升调试效率
    - 减少并发工作线程数（4 → 2）避免 API 速率限制
    - 使用共享 DataFetcher 实例防止多 baostock 连接冲突
    - 添加详细错误消息和日志记录
@@ -147,6 +153,7 @@
 - e517bc2: fix: improve technical indicators update logic for existing data (v0.5.20)
 - 54a3acd: fix: use sequential processing for technical indicators update to avoid API rate limiting (v0.5.21)
 - 4c9f8e1: fix: handle empty data from baostock when date range is small (likely non-trading days) (v0.5.22)
+- 8a5f2b1: feat: add filename and line number to log format for better error tracking (v0.5.23)
 
 **当前状态**: Stage 1-6 全部完成 ✅
 
