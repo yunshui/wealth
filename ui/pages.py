@@ -69,18 +69,30 @@ def show_homepage():
             return
 
         # Update button
-        col1, col2 = st.columns([4, 1])
+        col1, col2, col3 = st.columns([3, 1, 1])
         with col2:
-            if st.button("🔄 更新数据", use_container_width=True, key="update_home"):
-                st.info("数据更新功能将在后续完善")
+            if st.button("🔄 刷新", use_container_width=True, key="refresh_home"):
+                st.rerun()
 
-        # Sector leaders
+        with col3:
+            load_data_button = st.button("⬇️ 加载股票", use_container_width=True, key="load_stocks_home")
+
+        # Session state for tracking loaded stocks
+        if f"loaded_stocks_{sector['sector_id']}" not in st.session_state:
+            st.session_state[f"loaded_stocks_{sector['sector_id']}"] = False
+
+        # Async load stocks when button is clicked
+        if load_data_button or st.session_state[f"loaded_stocks_{sector['sector_id']}"]:
+            st.session_state[f"loaded_stocks_{sector['sector_id']}"] = True
+            _async_load_sector_stocks(storage, sector['sector_id'])
+
+        # Sector leaders - always show what's available in database first
         leaders = storage.get_sector_leaders(sector['sector_id'])
 
         if leaders:
             render_card(
                 f"{sector['sector_name']} - 龙头股列表",
-                lambda: _render_leaders_table(leaders, storage),
+                lambda: _render_leaders_table(leaders, storage, sector['sector_id']),
                 "🏆"
             )
         else:
@@ -97,12 +109,149 @@ def show_homepage():
         db_manager.close()
 
 
-def _render_leaders_table(leaders: list, storage: StockStorage):
+def _async_load_sector_stocks(storage: StockStorage, sector_id: str):
+    """Async load stock information for sector from API.
+
+    This function loads stock information for stocks in the sector
+    that don't exist in the database yet.
+
+    Args:
+        storage: StockStorage instance
+        sector_id: Sector ID
+    """
+    from data.fetcher import DataFetcher
+    from utils.config import Config
+    import json
+
+    try:
+        # Get sector info from database to find the sector name
+        sector_info = storage.get_sector_by_id(sector_id)
+        if not sector_info:
+            Logger.warning(f"Sector {sector_id} not found in database")
+            return
+
+        sector_name = sector_info['sector_name']
+
+        # Get configured stocks from config file
+        sectors_config = Config.get_major_sectors_config()
+
+        # Find the sector config by name
+        sector_config = None
+        for sc in sectors_config:
+            if sc['name'] == sector_name:
+                sector_config = sc
+                break
+
+        if not sector_config:
+            Logger.warning(f"Sector {sector_name} not found in config")
+            return
+
+        # Get stocks from config
+        configured_stocks = sector_config.get('stocks', [])
+
+        if not configured_stocks:
+            Logger.warning(f"No stocks configured for sector {sector_name}")
+            return
+
+        # Check which stocks are missing from database
+        missing_symbols = []
+        for symbol in configured_stocks:
+            stock = storage.get_stock(symbol)
+            if not stock:
+                missing_symbols.append(symbol)
+
+        if not missing_symbols:
+            Logger.info(f"All stocks already loaded for sector {sector_name}")
+            return
+
+        Logger.info(f"Loading {len(missing_symbols)} missing stocks for sector {sector_name}")
+
+        # Fetch stock info for missing stocks
+        fetcher = DataFetcher()
+
+        for symbol in missing_symbols:
+            try:
+                # Get stock info from akshare
+                clean_symbol = symbol.split('.')[0]
+                info = fetcher.get_stock_info(clean_symbol)
+
+                if info:
+                    # Create stock data dict
+                    stock_data = {
+                        'symbol': symbol,
+                        'name': info.get('股票简称', f'股票{symbol}'),
+                        'industry': info.get('所属行业', None),
+                        'sector': info.get('所属板块', None),
+                        'market_cap': _parse_market_cap(info.get('总市值', '0')),
+                        'pe_ratio': _parse_float(info.get('市盈率-动态', '0')),
+                        'pb_ratio': _parse_float(info.get('市净率', '0'))
+                    }
+                    storage.save_stock(stock_data)
+                    Logger.debug(f"Loaded stock info for {symbol}: {stock_data['name']}")
+                else:
+                    Logger.warning(f"Failed to get stock info for {symbol}: API returned empty data")
+
+            except Exception as e:
+                Logger.warning(f"Failed to load stock info for {symbol}: {str(e)}")
+                continue
+
+        Logger.info(f"Finished loading stocks for sector {sector_name}")
+
+    except Exception as e:
+        Logger.error(f"Failed to async load sector stocks: {str(e)}")
+
+
+def _parse_market_cap(value: str) -> float:
+    """Parse market cap string to float.
+
+    Args:
+        value: Market cap string (e.g., "100亿", "1000万")
+
+    Returns:
+        Market cap in yuan
+    """
+    if not value or pd.isna(value):
+        return 0.0
+
+    value_str = str(value).strip()
+
+    if '亿' in value_str:
+        return float(value_str.replace('亿', '')) * 1e8
+    elif '万' in value_str:
+        return float(value_str.replace('万', '')) * 1e4
+    else:
+        try:
+            return float(value_str)
+        except:
+            return 0.0
+
+
+def _parse_float(value: str) -> float:
+    """Parse string to float safely.
+
+    Args:
+        value: String value
+
+    Returns:
+        Float value or 0.0 if parsing fails
+    """
+    if not value or pd.isna(value):
+        return 0.0
+
+    try:
+        value_str = str(value).replace(',', '').strip()
+        return float(value_str) if value_str else 0.0
+    except:
+        return 0.0
+
+
+def _render_leaders_table(leaders: list, storage: StockStorage, sector_id: str = None):
     """Render sector leaders table with click navigation.
 
     Args:
         leaders: List of leader stock dictionaries
         storage: StockStorage instance for data retrieval
+        sector_id: Sector ID for async loading
     """
     if not leaders:
         return st.info("暂无数据")
@@ -110,7 +259,7 @@ def _render_leaders_table(leaders: list, storage: StockStorage):
     # Convert to DataFrame for display
     df = pd.DataFrame(leaders)
 
-    # Fetch stock names for display
+    # Fetch stock names for display - use "Unknown" if not found (async loading)
     df['name'] = df['symbol'].apply(lambda s: _get_stock_name(storage, s))
 
     # Format score column
@@ -125,6 +274,17 @@ def _render_leaders_table(leaders: list, storage: StockStorage):
         display_cols.append('volume_rank')
 
     df_display = df[display_cols]
+
+    # Show data loading status
+    if sector_id:
+        loaded_stocks = st.session_state.get(f"loaded_stocks_{sector_id}", False)
+        unknown_count = sum(df['name'] == 'Unknown')
+
+        if unknown_count > 0:
+            if not loaded_stocks:
+                st.caption(f"⚠️ {unknown_count} 只股票信息未加载，点击上方「加载股票」按钮")
+            else:
+                st.caption(f"⏳ 正在加载 {unknown_count} 只股票信息...")
 
     st.dataframe(
         df_display,

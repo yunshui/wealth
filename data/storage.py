@@ -75,6 +75,35 @@ class StockStorage:
             Logger.error(f"Failed to get sectors: {str(e)}")
             raise StorageException(f"Failed to get sectors: {str(e)}")
 
+    def get_sector_by_id(self, sector_id: str) -> Optional[Dict]:
+        """Get sector by ID.
+
+        Args:
+            sector_id: Sector ID
+
+        Returns:
+            Sector dictionary or None if not found
+        """
+        try:
+            conn = self.db.get_connection()
+            cursor = conn.cursor()
+            cursor.execute('''
+                SELECT sector_id, sector_name, sector_type, leader_count
+                FROM sectors WHERE sector_id = ?
+            ''', (sector_id,))
+            row = cursor.fetchone()
+            if row:
+                return {
+                    'sector_id': row['sector_id'],
+                    'sector_name': row['sector_name'],
+                    'sector_type': row['sector_type'],
+                    'leader_count': row['leader_count']
+                }
+            return None
+        except Exception as e:
+            Logger.error(f"Failed to get sector by ID: {str(e)}")
+            return None
+
     def get_major_sectors(self, config_path: str = 'config/MAJOR_SECTORS.json') -> List[Dict]:
         """Get predefined major sectors from config file.
 

@@ -128,6 +128,13 @@
     - 减少失败统计，更准确反映更新状态
     - 清理重复的 import 语句
 
+11. **异步股票加载优化** (v0.5.27)
+    - 板块进入时先显示数据库中已有的股票
+    - 添加"加载股票"按钮，异步获取缺失的股票信息
+    - 避免页面加载时同步 API 调用导致的延迟
+    - 提升页面响应速度和用户体验
+    - 显示未加载股票的数量和加载状态
+
 **经验教训**:
 
 1. **配置驱动设计的重要性**
@@ -170,6 +177,7 @@
 - 3a6954e: chore: bump version to v0.5.24 for documentation update
 - 52a8e3a: fix: correct training data preparation logic for feature extraction (v0.5.25)
 - 8c7f9d1: fix: ensure consistent feature dimensions across all training samples (v0.5.26)
+- 7a2f5e8: feat: add async stock loading for sector detail page (v0.5.27)
 
 **当前状态**: Stage 1-6 全部完成 ✅
 
