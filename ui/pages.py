@@ -77,7 +77,7 @@ def show_homepage():
                 st.rerun()
 
         with col3:
-            load_data_button = st.button("⬇️ 加载股票", use_container_width=True, key="load_stocks_home")
+            load_data_button = st.button("⬇️ 加载新股票", use_container_width=True, key="load_stocks_home")
 
         # Session state for tracking loaded stocks
         if f"loading_stocks_{sector_id}" not in st.session_state:
@@ -94,9 +94,9 @@ def show_homepage():
         if st.session_state[f"loading_stocks_{sector_id}"]:
             progress = st.session_state[f"load_progress_{sector_id}"]
             if progress["total"] > 0:
-                st.info(f"⏳ 正在加载股票数据... ({progress['current']}/{progress['total']})")
+                st.info(f"⏳ 正在加载新股票数据... ({progress['current']}/{progress['total']})")
             else:
-                st.info("⏳ 正在加载股票数据...")
+                st.info("⏳ 正在加载新股票数据...")
 
             # Load a batch of stocks (non-blocking by limiting batch size)
             _load_sector_stocks_batch(storage, sector_id, batch_size=3)
@@ -109,7 +109,7 @@ def show_homepage():
 
         if leaders:
             render_card(
-                f"{sector['sector_name']} - 龙头股列表",
+                f"{sector['sector_name']} - 龙头股列表 (共 {len(leaders)} 只)",
                 lambda: _render_leaders_table(leaders, storage, sector_id),
                 "🏆"
             )
@@ -118,7 +118,7 @@ def show_homepage():
             if st.session_state.get(f"loading_stocks_{sector_id}", False):
                 st.info("⏳ 正在加载板块股票数据...")
             else:
-                st.info("该板块暂无龙头股数据，请点击上方「加载股票」按钮获取")
+                st.info(f"⚠️ 数据库中暂无该板块股票，请点击上方「加载新股票」按钮从配置文件加载")
 
         # Sector trend chart placeholder
         render_card(
@@ -286,7 +286,7 @@ def _render_leaders_table(leaders: list, storage: StockStorage, sector_id: str =
     """Render sector leaders table with click navigation.
 
     Args:
-        leaders: List of leader stock dictionaries
+        leaders: List of leader stock dictionaries (now includes name from database)
         storage: StockStorage instance for data retrieval
         sector_id: Sector ID for async loading
     """
@@ -296,8 +296,10 @@ def _render_leaders_table(leaders: list, storage: StockStorage, sector_id: str =
     # Convert to DataFrame for display
     df = pd.DataFrame(leaders)
 
-    # Fetch stock names for display - use "Unknown" if not found (async loading)
-    df['name'] = df['symbol'].apply(lambda s: _get_stock_name(storage, s))
+    # Use the name from database (already included in leaders)
+    # No need to call _get_stock_name() anymore
+    if 'name' not in df.columns or df['name'].isnull().all():
+        df['name'] = 'Unknown'  # Fallback if no name in leaders
 
     # Format score column
     if 'score' in df.columns:
@@ -312,23 +314,33 @@ def _render_leaders_table(leaders: list, storage: StockStorage, sector_id: str =
 
     df_display = df[display_cols]
 
-    # Show data loading status
+    # Show loading status only if there are stocks with "Unknown" name
+    # (which shouldn't happen anymore since we JOIN with stocks table)
     if sector_id:
         loading_stocks = st.session_state.get(f"loading_stocks_{sector_id}", False)
-        unknown_count = sum(df['name'] == 'Unknown')
+        total_loaded = st.session_state.get(f"load_progress_{sector_id}", {}).get("total", 0)
+        current_loaded = st.session_state.get(f"load_progress_{sector_id}", {}).get("current", 0)
 
-        if unknown_count > 0:
-            if loading_stocks:
-                progress = st.session_state.get(f"load_progress_{sector_id}", {})
-                total = progress.get("total", unknown_count)
-                current = progress.get("current", 0)
-                st.caption(f"⏳ 正在加载股票数据 ({current}/{total})")
+        if loading_stocks:
+            # Show loading progress
+            if total_loaded > 0:
+                st.caption(f"⏳ 正在加载新股票 ({current_loaded}/{total_loaded})")
             else:
-                st.caption(f"⚠️ {unknown_count} 只股票信息未加载，点击「加载股票」按钮获取")
+                st.caption("⏳ 正在加载新股票...")
+        elif len(leaders) == 0:
+            # No stocks in database
+            st.caption("💡 提示: 点击「加载新股票」从配置文件加载该板块股票")
         else:
-            # All stocks loaded
-            if st.session_state.get(f"loaded_stocks_{sector_id}", False):
-                st.success("✅ 股票信息已全部加载")
+            # Stocks exist in database, show message about configured stocks
+            st.success(f"✅ 数据库中有 {len(leaders)} 只股票")
+            # Add note about configured stocks
+            from utils.config import Config
+            sectors_config = Config.get_major_sectors_config()
+            sector_config = next((sc for sc in sectors_config if sc['name'] == sector_id), None)
+            if sector_config:
+                configured_count = len(sector_config.get('stocks', []))
+                if configured_count > len(leaders):
+                    st.caption(f"💡 配置文件中有 {configured_count} 只股票，可点击「加载新股票」加载剩余的股票")
 
     st.dataframe(
         df_display,

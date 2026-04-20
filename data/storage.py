@@ -319,6 +319,49 @@ class StockStorage:
             Logger.error(f"Failed to get stock: {str(e)}")
             raise StorageException(f"Failed to get stock: {str(e)}")
 
+    def get_stock_latest_data(self, symbol: str) -> Optional[Dict]:
+        """Get latest stock data from stock_data table.
+
+        Args:
+            symbol: Stock symbol
+
+        Returns:
+            Dictionary with latest stock data or None if not found
+        """
+        try:
+            conn = self.db.get_connection()
+            cursor = conn.cursor()
+            # Get latest 2 records to calculate prev_close from previous day's close
+            cursor.execute('''
+                SELECT date, open, high, low, close, volume, amount
+                FROM stock_data WHERE symbol = ? ORDER BY date DESC LIMIT 2
+            ''', (symbol,))
+            rows = cursor.fetchall()
+
+            if not rows:
+                return None
+
+            # Latest data
+            latest = rows[0]
+            # Previous day's close (if available)
+            prev_close = rows[1]['close'] if len(rows) > 1 else latest['close']
+
+            return {
+                'trade_date': latest['date'],  # Map to trade_date for compatibility
+                'date': latest['date'],
+                'open': latest['open'],
+                'high': latest['high'],
+                'low': latest['low'],
+                'close': latest['close'],
+                'pre_close': prev_close,  # Previous day's close
+                'vol': latest['volume'],  # Map to vol for compatibility
+                'volume': latest['volume'],
+                'amount': latest['amount']
+            }
+        except Exception as e:
+            Logger.warning(f"Failed to get latest data for {symbol}: {str(e)}")
+            return None
+
     def get_stock_list(self, industry: str = None, sector: str = None) -> List[Dict]:
         """Get stock list with optional filters."""
         try:
@@ -674,13 +717,26 @@ class StockStorage:
             raise StorageException(f"Failed to save sector leaders: {str(e)}")
 
     def get_sector_leaders(self, sector_id: str) -> List[Dict]:
-        """Get sector leaders."""
+        """Get sector leaders including all configured stocks.
+
+        Args:
+            sector_id: Sector ID
+
+        Returns:
+            List of leader stock dictionaries from sector_leaders table
+        """
         try:
             conn = self.db.get_connection()
             cursor = conn.cursor()
+            # LEFT JOIN with stocks table to get all configured stocks
             cursor.execute('''
-                SELECT sector_id, sector_name, symbol, score, rank, market_cap_rank, volume_rank
-                FROM sector_leaders WHERE sector_id = ? ORDER BY rank
+                SELECT sl.sector_id, sl.sector_name, sl.symbol, sl.score, sl.rank,
+                       sl.market_cap_rank, sl.volume_rank,
+                       s.name, s.industry, s.sector
+                FROM sector_leaders sl
+                LEFT JOIN stocks s ON sl.symbol = s.symbol
+                WHERE sl.sector_id = ?
+                ORDER BY sl.rank
             ''', (sector_id,))
             rows = cursor.fetchall()
             return [
@@ -691,7 +747,12 @@ class StockStorage:
                     'score': row['score'],
                     'rank': row['rank'],
                     'market_cap_rank': row['market_cap_rank'],
-                    'volume_rank': row['volume_rank']
+                    'volume_rank': row['volume_rank'],
+                    # Directly use stocks.name, with placeholder fallback
+                    'name': row['name'] if row['name'] else f'股票{row["symbol"]}',
+                    'industry': row['industry'],
+                    'sector_from_stocks': row['sector'],  # Sector from stocks table
+                    'has_stock_info': row['name'] is not None  # Flag to indicate if stock info exists
                 }
                 for row in rows
             ]
@@ -700,20 +761,26 @@ class StockStorage:
             raise StorageException(f"Failed to get sector leaders: {str(e)}")
 
     def get_sector_leaders_by_name(self, sector_name: str) -> List[Dict]:
-        """Get sector leaders by sector name.
+        """Get sector leaders by sector name including all configured stocks.
 
         Args:
             sector_name: Sector name
 
         Returns:
-            List of leader stock dictionaries
+            List of leader stock dictionaries from sector_leaders table
         """
         try:
             conn = self.db.get_connection()
             cursor = conn.cursor()
+            # LEFT JOIN with stocks table to get all configured stocks
             cursor.execute('''
-                SELECT sector_id, sector_name, symbol, score, rank, market_cap_rank, volume_rank
-                FROM sector_leaders WHERE sector_name = ? ORDER BY rank
+                SELECT sl.sector_id, sl.sector_name, sl.symbol, sl.score, sl.rank,
+                       sl.market_cap_rank, sl.volume_rank,
+                       s.name, s.industry, s.sector
+                FROM sector_leaders sl
+                LEFT JOIN stocks s ON sl.symbol = s.symbol
+                WHERE sl.sector_name = ?
+                ORDER BY sl.rank
             ''', (sector_name,))
             rows = cursor.fetchall()
             return [
@@ -724,7 +791,12 @@ class StockStorage:
                     'score': row['score'],
                     'rank': row['rank'],
                     'market_cap_rank': row['market_cap_rank'],
-                    'volume_rank': row['volume_rank']
+                    'volume_rank': row['volume_rank'],
+                    # Directly use stocks.name, with placeholder fallback
+                    'name': row['name'] if row['name'] else f'股票{row["symbol"]}',
+                    'industry': row['industry'],
+                    'sector_from_stocks': row['sector'],  # Sector from stocks table
+                    'has_stock_info': row['name'] is not None  # Flag to indicate if stock info exists
                 }
                 for row in rows
             ]

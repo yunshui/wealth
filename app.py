@@ -5,8 +5,9 @@ from utils.logger import Logger
 from data.database import DatabaseManager
 from data.storage import StockStorage
 from ui.layout import sidebar_layout, sector_grid, footer_right
-from datetime import datetime
+from datetime import datetime, timedelta as td
 import time
+import pandas as pd
 
 # Page configuration
 st.set_page_config(
@@ -32,14 +33,11 @@ if "selected_sector" not in st.session_state:
 if "selected_symbol" not in st.session_state:
     st.session_state.selected_symbol = None
 
-if "sector_data" not in st.session_state:
-    st.session_state.sector_data = {}
+if "update_sector_requested" not in st.session_state:
+    st.session_state.update_sector_requested = False
 
-if "last_refresh_time" not in st.session_state:
-    st.session_state.last_refresh_time = 0
-
-if "refresh_requested" not in st.session_state:
-    st.session_state.refresh_requested = False
+if "sector_updated" not in st.session_state:
+    st.session_state.sector_updated = False
 
 
 def load_sectors():
@@ -66,71 +64,201 @@ def get_stock_name(storage: StockStorage, symbol: str) -> str:
     return stock_data.get('name', 'Unknown') if stock_data else 'Unknown'
 
 
-def fetch_sector_realtime_data(storage: StockStorage, sector_id: str):
-    """Fetch real-time data for sector leaders from akshare.
+def get_stock_latest_data(storage: StockStorage, symbol: str) -> dict:
+    """Get latest stock data from database.
+
+    Args:
+        storage: StockStorage instance
+        symbol: Stock symbol
+
+    Returns:
+        Dictionary with latest stock data
+    """
+    try:
+        # Get latest stock data from stock_data table
+        latest_data = storage.get_stock_latest_data(symbol)
+        if latest_data:
+            return latest_data
+    except Exception as e:
+        Logger.warning(f"Failed to get latest data for {symbol}: {str(e)}")
+    return {}
+
+
+def update_sector_stocks(storage: StockStorage, sector_id: str):
+    """Update stock data for the current sector.
 
     Args:
         storage: StockStorage instance
         sector_id: Sector ID
 
     Returns:
-        Dictionary with symbol as key and latest data as value
+        True if update was successful, False otherwise
     """
-    try:
-        from data.fetcher import DataFetcher
+    from data.fetcher import DataFetcher
+    from analysis.indicators import IndicatorCalculator
+    from datetime import timedelta
+    from utils.config import Config
 
+    try:
         # Get sector leaders
         leaders = storage.get_sector_leaders(sector_id)
         if not leaders:
-            Logger.warning(f"No leaders found for sector {sector_id}")
-            # Return empty data but also log this
-            return {}
+            st.warning("该板块暂无龙头股")
+            return False
+
+        # Calculate date range
+        end_date = datetime.now().strftime('%Y%m%d')
+        cache_hours = Config.get_update_cache_hours()
+
+        # Create progress displays
+        progress_bar = st.progress(0)
+        status_placeholder = st.empty()
+
+        processed_count = 0
+        failed_count = 0
+        total = len(leaders)
 
         fetcher = DataFetcher()
-        realtime_data = {}
+        calculator = IndicatorCalculator()
 
-        update_time_str = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-
-        for leader in leaders:
+        for idx, leader in enumerate(leaders):
             symbol = leader.get('symbol', '')
-            if symbol:
+            name = leader.get('name', symbol)
+
+            # Update status
+            status_placeholder.info(f"正在更新 {idx+1}/{total}: {symbol} - {name}")
+
+            try:
+                # Check if stock info exists in stocks table
+                stock_info = storage.get_stock(symbol)
+                current_name = stock_info.get('name') if stock_info else None
+                needs_name_update = (
+                    not stock_info or
+                    not stock_info.get('name') or
+                    stock_info.get('name', '').startswith('股票') or
+                    stock_info.get('name', '') == symbol
+                )
+
+                Logger.info(f"Stock {symbol}: stock_info={bool(stock_info)}, current_name='{current_name}', needs_update={needs_name_update}")
+
+                if needs_name_update:
+                    try:
+                        stock_info_api = fetcher.get_stock_info(symbol)
+                        new_name = None
+
+                        Logger.info(f"Stock {symbol}: API returned type={type(stock_info_api)}")
+
+                        # Handle DataFrame format from akshare
+                        if isinstance(stock_info_api, pd.DataFrame):
+                            Logger.info(f"Stock {symbol}: Processing DataFrame with {len(stock_info_api)} rows")
+                            for idx, row in stock_info_api.iterrows():
+                                item = row.get('item')
+                                Logger.debug(f"Stock {symbol}: Row {idx}: item='{item}'")
+                                if item == '股票简称':
+                                    new_name = row.get('value')
+                                    Logger.info(f"Stock {symbol}: Found stock name '{new_name}' at row {idx}")
+                                    break
+
+                        # Handle dict format
+                        if not new_name and isinstance(stock_info_api, dict):
+                            if 'value' in stock_info_api:
+                                for item in stock_info_api['value']:
+                                    if isinstance(item, dict) and item.get('item') == '股票简称':
+                                        new_name = item.get('value')
+                                        break
+                            # Try to find stock name in dict directly
+                            for key, value in stock_info_api.items():
+                                if '名称' in key or 'name' in key.lower():
+                                    new_name = value
+                                    break
+
+                        Logger.info(f"Stock {symbol}: Extracted name='{new_name}'")
+
+                        if new_name and not new_name.startswith('股票'):
+                            # Update or insert stock info in stocks table
+                            conn = storage.db.get_connection()
+                            cursor = conn.cursor()
+                            cursor.execute('''
+                                INSERT INTO stocks (symbol, name, industry, sector, updated_at)
+                                VALUES (?, ?, ?, ?, ?)
+                                ON CONFLICT(symbol) DO UPDATE SET
+                                    name = excluded.name,
+                                    updated_at = excluded.updated_at
+                            ''', (symbol, new_name, stock_info.get('industry') if stock_info else None,
+                                  stock_info.get('sector') if stock_info else None,
+                                  datetime.now().strftime('%Y-%m-%d %H:%M:%S')))
+                            conn.commit()
+                            Logger.info(f"Updated stock info for {symbol}: {new_name}")
+                            name = new_name  # Update display name
+                        else:
+                            Logger.warning(f"Stock {symbol}: No valid name found (new_name='{new_name}')")
+                    except Exception as e:
+                        Logger.warning(f"Failed to update stock name for {symbol}: {str(e)}")
+
+                # Check if today's data already exists
+                today_str = datetime.now().strftime('%Y-%m-%d')
+                needs_update = True
+
                 try:
-                    # Get latest/real-time data using spot API
-                    latest_info = fetcher.get_stock_latest(symbol)
+                    stock_info = storage.get_stock(symbol)
+                    if stock_info and stock_info.get('updated_at'):
+                        last_update = datetime.strptime(stock_info['updated_at'], '%Y-%m-%d %H:%M:%S')
+                        hours_since_update = (datetime.now() - last_update).total_seconds() / 3600
+                        has_today_data = storage.has_stock_data_for_date(symbol, today_str)
 
-                    if latest_info:
-                        # Extract data from latest info
-                        open_price = float(latest_info.get('今开', 0))
-                        high_price = float(latest_info.get('最高', 0))
-                        low_price = float(latest_info.get('最低', 0))
-                        close_price = float(latest_info.get('最新价', 0))
-                        prev_close = float(latest_info.get('昨收', 0))
-                        volume = float(latest_info.get('成交量', 0))
-                        amount = float(latest_info.get('成交额', 0))
+                        if has_today_data:
+                            needs_update = False
+                        elif hours_since_update < cache_hours:
+                            needs_update = True
+                except:
+                    pass
 
-                        realtime_data[symbol] = {
-                            'symbol': symbol,
-                            'open': open_price,
-                            'high': high_price,
-                            'low': low_price,
-                            'close': close_price,
-                            'volume': volume,
-                            'amount': amount,
-                            'date': update_time_str,
-                            'prev_close': prev_close
-                        }
-                except Exception as e:
-                    Logger.warning(f"Failed to fetch realtime data for {symbol}: {str(e)}")
-                    continue
+                if needs_update:
+                    # Get latest date for incremental update
+                    latest_date = storage.get_stock_latest_date(symbol)
+                    if latest_date:
+                        latest_dt = datetime.strptime(latest_date, '%Y-%m-%d')
+                        next_date = (latest_dt + timedelta(days=1)).strftime('%Y%m%d')
+                        start_date = next_date
+                    else:
+                        # No data exists, use config start date
+                        start_date = Config.get_data_start_date().replace('-', '')
 
-        # Update session state
-        st.session_state.sector_data = realtime_data
-        st.session_state.last_refresh_time = time.time()
+                    # Fetch and save data
+                    history_df = fetcher.get_stock_history(symbol, start_date, end_date)
+                    if history_df is not None and not history_df.empty:
+                        history_df = calculator.calculate_all(history_df)
+                        storage.save_stock_data_incremental(history_df)
+                        processed_count += 1
+                    else:
+                        failed_count += 1
+                else:
+                    processed_count += 1  # Today's data exists
 
-        return realtime_data
+            except Exception as e:
+                failed_count += 1
+                Logger.warning(f"Failed to update {symbol}: {str(e)}")
+
+            # Update progress
+            progress = (idx + 1) / total
+            progress_bar.progress(progress)
+
+        # Clear displays
+        progress_bar.empty()
+        status_placeholder.empty()
+
+        # Show result
+        if processed_count > 0:
+            st.success(f"✅ 更新完成! 成功 {processed_count} 只, 失败 {failed_count} 只")
+        else:
+            st.warning(f"⚠️ 更新完成! 成功 {processed_count} 只, 失败 {failed_count} 只")
+
+        return True
+
     except Exception as e:
-        Logger.error(f"Failed to fetch sector realtime data: {str(e)}")
-        return {}
+        Logger.error(f"Failed to update sector stocks: {str(e)}")
+        st.error(f"更新失败: {str(e)}")
+        return False
 
 
 # Left sidebar with title and collapsible navigation
@@ -176,39 +304,28 @@ with content_col:
             storage = StockStorage(db_manager)
             sector_id = sector.get('sector_id', '')
 
-            # Header with refresh button
+            # Header with update button
             col_left, col_right = st.columns([4, 1])
             with col_left:
                 st.markdown(f"<p style='color: #000000;'><strong>当前板块:</strong> {sector['sector_name']}</p>", unsafe_allow_html=True)
             with col_right:
-                if st.button("🔄 刷新数据", key="refresh_sector"):
-                    st.session_state.refresh_requested = True
+                if st.button("🔄 更新数据", key="update_sector_stocks"):
+                    st.session_state.update_sector_requested = True
+                    st.rerun()
 
-            # Handle refresh request
-            if st.session_state.refresh_requested:
-                st.session_state.sector_data = {}
-                st.session_state.last_refresh_time = 0
-                st.session_state.refresh_requested = False
-                st.rerun()
+            # Handle update request
+            if st.session_state.update_sector_requested:
+                st.session_state.update_sector_requested = False
+                st.markdown("---")
+                st.markdown("### 📥 更新板块股票数据")
+                update_sector_stocks(storage, sector_id)
+                st.markdown("---")
 
-            # Auto-refresh every 5 minutes
-            current_time = time.time()
-            if st.session_state.last_refresh_time > 0 and current_time - st.session_state.last_refresh_time > 300:  # 5 minutes
-                st.session_state.sector_data = {}
-                st.session_state.last_refresh_time = 0
-                st.session_state.refresh_requested = True
+                # After update completes, the data is already saved to database
+                # Continue to display the updated data below
 
             # Get sector leaders
             leaders = storage.get_sector_leaders(sector_id)
-
-            # Check if need to fetch data (do this before UI is rendered)
-            if st.session_state.last_refresh_time == 0:
-                with st.spinner("正在获取实时数据..."):
-                    fetch_sector_realtime_data(storage, sector_id)
-                # Always set refresh time to prevent infinite loops
-                if st.session_state.last_refresh_time == 0:
-                    st.session_state.last_refresh_time = time.time()
-                st.rerun()
 
             # Display message if no leaders
             if not leaders:
@@ -224,19 +341,23 @@ with content_col:
 
                 for i, leader in enumerate(leaders[:5], 1):
                     symbol = leader.get('symbol', '')
-                    name = get_stock_name(storage, symbol)
+                    name = leader.get('name', get_stock_name(storage, symbol))
                     score = leader.get('score', 0)
                     rank = leader.get('rank', 0)
 
-                    # Use realtime data if available
-                    realtime_data = st.session_state.sector_data.get(symbol, {})
+                    # Get latest data from database
+                    stock_data = get_stock_latest_data(storage, symbol)
 
                     # Create expandable card for each stock
                     with st.expander(f"{i}. {symbol} - {name} - 得分: {score:.2f} (排名: {rank})", expanded=True):
-                        if realtime_data:
-                            # Use realtime data
-                            close_price = realtime_data.get('close', 0)
-                            prev_close = realtime_data.get('prev_close', 0)
+                        if stock_data:
+                            # Use database data
+                            close_price = float(stock_data.get('close', 0))
+                            open_price = float(stock_data.get('open', 0))
+                            high_price = float(stock_data.get('high', 0))
+                            low_price = float(stock_data.get('low', 0))
+                            prev_close = float(stock_data.get('pre_close', 0))
+                            volume = float(stock_data.get('vol', 0))
 
                             # Calculate change percentage
                             if prev_close and prev_close > 0:
@@ -255,26 +376,26 @@ with content_col:
                                 st.metric("涨跌幅", f"{change_pct:+.2f}%", delta=None, delta_color=delta_color)
 
                             with col3:
-                                st.metric("开盘价", f"{realtime_data.get('open', 0):.2f}")
+                                st.metric("开盘价", f"{open_price:.2f}")
 
                             with col4:
-                                update_date = realtime_data.get('date', '')
-                                if isinstance(update_date, datetime):
-                                    update_date = update_date.strftime('%Y-%m-%d %H:%M:%S')
-                                st.caption(f"更新日期: {update_date}")
+                                data_date = stock_data.get('trade_date', '')
+                                if data_date:
+                                    st.caption(f"数据日期: {data_date}")
+                                else:
+                                    st.caption("数据日期: 未知")
 
                             # Additional price analysis
                             st.markdown("**价位分析**")
                             price_col1, price_col2, price_col3 = st.columns(3)
 
                             with price_col1:
-                                st.metric("最高价", f"{realtime_data.get('high', 0):.2f}")
+                                st.metric("最高价", f"{high_price:.2f}")
 
                             with price_col2:
-                                st.metric("最低价", f"{realtime_data.get('low', 0):.2f}")
+                                st.metric("最低价", f"{low_price:.2f}")
 
                             with price_col3:
-                                volume = realtime_data.get('volume', 0)
                                 if volume > 100000000:
                                     vol_display = f"{volume/100000000:.2f}亿"
                                 elif volume > 10000:
@@ -284,8 +405,6 @@ with content_col:
                                 st.metric("成交量", vol_display)
 
                             # Amplitude analysis
-                            high_price = realtime_data.get('high', 0)
-                            low_price = realtime_data.get('low', 0)
                             if low_price > 0:
                                 amplitude = (high_price - low_price) / low_price * 100
                                 st.markdown(f"**振幅**: {amplitude:+.2f}%")
@@ -297,24 +416,17 @@ with content_col:
                                 st.rerun()
                         else:
                             # Show no data indicator
-                            st.caption("暂无实时数据")
+                            st.caption("暂无数据，请在「数据更新」页面更新股票数据")
 
-                            # Add button to view stock detail (even without realtime data)
+                            # Add button to view stock detail (even without data)
                             if st.button(f"📊 查看 {symbol} 详情和预测", key=f"view_detail_no_data_{symbol}"):
                                 st.session_state.selected_symbol = symbol
                                 st.session_state.nav_module = "stock_detail"
                                 st.rerun()
 
-            # Display last refresh time
-            if st.session_state.last_refresh_time > 0:
-                refresh_time = datetime.fromtimestamp(st.session_state.last_refresh_time).strftime('%Y-%m-%d %H:%M:%S')
-                st.caption(f"数据更新时间: {refresh_time} (每5分钟自动刷新)")
-
             if st.button("← 返回板块列表"):
                 st.session_state.selected_sector = None
                 st.session_state.nav_module = "home"
-                st.session_state.sector_data = {}
-                st.session_state.last_refresh_time = 0
                 st.rerun()
 
             footer_right()

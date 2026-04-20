@@ -2,6 +2,92 @@
 
 ## 项目进度记录
 
+### 2026-04-20 - 批量更新股票名称到 stocks 表 ✅
+
+**已完成**:
+
+1. **批量更新股票名称** (v0.5.40)
+   - 创建批量更新脚本 `update_stock_names.py`
+   - 更新所有 116 只配置的股票名称到 stocks 表
+   - 从 akshare API 获取股票名称并保存
+   - 板块分析页面现在能够正确显示股票名称
+
+### 2026-04-20 - 简化股票名称逻辑，直接使用 stocks 表 ✅
+
+**已完成**:
+
+1. **简化股票名称逻辑** (v0.5.39)
+   - `data/storage.py`: get_sector_leaders() 直接使用 stocks.name
+   - `data/storage.py`: get_sector_leaders_by_name() 直接使用 stocks.name
+   - `app.py`: update_sector_stocks() 更新 stocks 表而不是 sector_leaders 表
+   - `ui/pages.py`: _update_sectors_data() 移除股票名称获取逻辑
+   - `data/database.py`: 移除 sector_leaders.stock_name 字段定义
+   - 股票名称统一从 stocks 表获取和更新
+
+2. **修复股票名称获取逻辑** (v0.5.38)
+   - `app.py`: 修改 `update_sector_stocks()` 中的股票名称获取逻辑
+   - `ui/pages.py`: 修改 `_update_sectors_data()` 中的股票名称获取逻辑
+   - 正确处理 DataFrame 格式的 API 返回数据
+   - 查找 `item='股票简称'` 的行获取股票名称
+   - 添加日志记录更新操作
+
+2. **同步更新股票名称** (v0.5.37)
+   - `app.py`: 修改 `update_sector_stocks()` 函数
+   - 检查股票名称是否为空或占位符
+   - 从 API 获取股票名称并更新 sector_leaders 表
+   - 用户点击"更新数据"按钮时同时更新股票名称
+   - 修复板块分析页面更新数据后股票名称不变的问题
+
+2. **添加股票名称存储功能** (v0.5.36)
+   - `data/database.py`: sector_leaders 表添加 stock_name 字段
+   - `data/storage.py`: 修改 save_sector_leaders() 支持 stock_name 字段
+   - `data/storage.py`: 修改 get_sector_leaders() 返回 stock_name 字段
+   - `data/storage.py`: 修改 get_sector_leaders_by_name() 返回 stock_name 字段
+   - `ui/pages.py`: 更新板块数据时获取并保存股票名称
+   - 优先使用 sector_leaders.stock_name > stocks.name > 占位符
+   - 修复龙头股显示"股票000858.SZ"占位符名称的问题
+
+2. **修复板块数据更新后显示问题** (v0.5.35)
+   - `data/storage.py`: 修复 `get_stock_latest_data()` 列名不匹配问题
+   - 修正 `trade_date` → `date`, `pre_close` → None (not available), `vol` → `volume`
+   - 添加兼容性映射，同时返回新旧列名
+   - 修复板块分析页面更新数据后仍显示"暂无数据"的问题
+
+2. **修复板块股票显示问题** (v0.5.34)
+   - `data/storage.py`: 修改 `get_sector_leaders()` 使用 LEFT JOIN with stocks table
+   - `data/storage.py`: 修改 `get_sector_leaders_by_name()` 使用 LEFT JOIN
+   - 保留 sector_leaders 表的所有配置股票，即使 stocks 表没有信息
+   - 为没有 stocks 表信息的股票设置占位符名称
+   - 添加 `has_stock_info` 标志标识股票信息是否完整
+   - 修复首页板块股票数量显示为 0 的问题
+
+2. **板块分析页面添加更新数据功能** (v0.5.33)
+   - `app.py`: 添加 `update_sector_stocks()` 函数
+   - `app.py`: 板块分析页面添加"🔄 更新数据"按钮
+   - 点击按钮后直接更新当前板块的股票数据（不跳转页面）
+   - 显示更新进度和结果统计
+   - 支持增量更新，只获取缺失数据
+   - 检查今日数据是否已存在，避免重复更新
+
+2. **移除实时数据加载优化** (v0.5.32)
+   - `app.py`: 删除 `fetch_sector_realtime_data()` 函数
+   - `app.py`: 删除相关 session state (sector_data, last_refresh_time, refresh_requested)
+   - `app.py`: 删除 "正在获取实时数据..." spinner
+   - `app.py`: 删除自动刷新逻辑（5分钟）
+   - `data/storage.py`: 添加 `get_stock_latest_data()` 方法获取数据库最新数据
+   - 板块页面直接使用数据库中的历史数据
+   - 提升页面响应速度，无延迟加载
+
+2. **数据库查询优化** (v0.5.31)
+   - `data/storage.py`: 修改 `get_sector_leaders()` 使用 INNER JOIN with stocks table
+   - `data/storage.py`: 修改 `get_sector_leaders_by_name()` 使用 INNER JOIN
+   - 只返回在 stocks 表中存在的股票，避免显示不存在的股票
+   - 在查询时直接获取股票名称，减少额外查询
+   - `ui/pages.py`: 更新 `_render_leaders_table()` 使用查询结果中的名称
+   - 提升页面加载速度和用户体验
+
+**之前完成**:
+
 ### 2026-04-17 - 配置驱动和性能优化 ✅
 
 **已完成**:
