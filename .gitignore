@@ -40,3 +40,7 @@ htmlcov/
 
 # Claude
 .claude/logs/__pycache__/
+
+# Trained models
+models/*.pkl
+models/model_info.json
