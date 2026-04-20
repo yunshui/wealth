@@ -409,6 +409,17 @@ def show_stock_detail():
             st.warning(f"未找到股票: {symbol}")
             return
 
+        # Check if stock info is from sector_leaders (incomplete)
+        from_sector_leaders = stock.get('from_sector_leaders', False)
+        if from_sector_leaders:
+            col1, col2, col3 = st.columns([2, 1])
+            with col1:
+                st.warning(f"⚠️ 股票 {symbol} 的基本信息未加载，请先在首页点击「加载股票」按钮获取完整信息")
+            with col2:
+                if st.button("📱 返回首页加载", use_container_width=True, key="goto_load"):
+                    st.session_state.page = "首页/板块总览"
+                    st.rerun()
+
         # Display stock info card
         _render_stock_info_card(stock, storage)
 

@@ -142,6 +142,13 @@
     - 改进空数据提示信息，引导用户点击加载按钮
     - 加载完成后显示成功提示
 
+13. **股票信息回退机制** (v0.5.29)
+    - 当 stocks 表中没有股票信息时，从 sector_leaders 表获取基本信息
+    - 显示警告提示用户加载完整的股票信息
+    - 提供"返回首页加载"按钮快速导航
+    - 避免因缺少基本信息导致页面无法显示
+    - 改善用户体验，确保至少能显示股票历史数据
+
 **经验教训**:
 
 1. **配置驱动设计的重要性**
@@ -186,6 +193,7 @@
 - 8c7f9d1: fix: ensure consistent feature dimensions across all training samples (v0.5.26)
 - 7a2f5e8: feat: add async stock loading for sector detail page (v0.5.27)
 - 9b3c2d1: fix: implement non-blocking progressive stock loading with batch processing (v0.5.28)
+- 1d8f4e3: fix: fallback to sector_leaders table when stock info missing in stocks table (v0.5.29)
 
 **当前状态**: Stage 1-6 全部完成 ✅
 

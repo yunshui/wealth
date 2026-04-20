@@ -265,7 +265,14 @@ class StockStorage:
             raise StorageException(f"Failed to save stock: {str(e)}")
 
     def get_stock(self, symbol: str) -> Optional[Dict]:
-        """Get stock by symbol."""
+        """Get stock by symbol.
+
+        Args:
+            symbol: Stock symbol
+
+        Returns:
+            Stock dictionary or None if not found
+        """
         try:
             conn = self.db.get_connection()
             cursor = conn.cursor()
@@ -285,6 +292,27 @@ class StockStorage:
                     'pb_ratio': row['pb_ratio'],
                     'list_date': row['list_date'],
                     'updated_at': row['updated_at']
+                }
+            # If not found in stocks table, try to get minimal info from sector_leaders
+            Logger.debug(f"Stock {symbol} not found in stocks table, checking sector_leaders")
+            cursor.execute('''
+                SELECT symbol, rank, score, sector_id
+                FROM sector_leaders WHERE symbol = ?
+            ''', (symbol,))
+            leader_row = cursor.fetchone()
+            if leader_row:
+                # Return minimal info from sector_leaders
+                return {
+                    'symbol': leader_row['symbol'],
+                    'name': f'股票{symbol}',  # Placeholder name
+                    'industry': None,
+                    'sector': None,
+                    'market_cap': None,
+                    'pe_ratio': None,
+                    'pb_ratio': None,
+                    'list_date': None,
+                    'updated_at': None,
+                    'from_sector_leaders': True  # Flag to indicate source
                 }
             return None
         except Exception as e:
