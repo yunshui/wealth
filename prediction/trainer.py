@@ -64,7 +64,7 @@ class ModelTrainer:
             lookback = lookback or 252
             label_horizon = label_horizon or 120
 
-        Logger.info(f"Preparing training data for {horizon} horizon")
+        Logger.info(f"Preparing training data for {horizon} horizon (lookback={lookback}, label_horizon={label_horizon})")
 
         # Get stock list
         if symbols is None:
@@ -85,29 +85,64 @@ class ModelTrainer:
                 # Get stock data
                 df = self.storage.get_stock_data(symbol)
 
-                if df.empty or len(df) < lookback + label_horizon:
+                data_count = len(df)
+                min_required = lookback + label_horizon
+
+                if df.empty or data_count < min_required:
+                    Logger.debug(f"{symbol}: Insufficient data (have {data_count}, need {min_required})")
                     continue
 
                 # Calculate indicators
                 df = IndicatorCalculator.calculate_all(df)
 
-                # Extract features
-                if horizon == 'short':
-                    features = FeatureEngineer.extract_short_term_features(df, lookback)
-                elif horizon == 'medium':
-                    features = FeatureEngineer.extract_medium_term_features(df, lookback)
-                else:
-                    features = FeatureEngineer.extract_long_term_features(df)
-
-                # Create labels
+                # Create labels for all data points
                 labels = FeatureEngineer.create_labels(df, label_horizon)
 
-                # Only use samples with valid labels
-                valid_indices = labels[lookback:] != 0  # Exclude HOLD labels
+                # Extract features for each valid time point
+                # Start from lookback point, end before label_horizon from the end
+                start_idx = lookback
+                end_idx = len(df) - label_horizon
 
-                if np.sum(valid_indices) > 0:
-                    X_list.append(features[lookback:][valid_indices])
-                    y_list.append(labels[lookback:][valid_indices])
+                samples_count = 0
+                for i in range(start_idx, end_idx):
+                    # Get lookback window
+                    window_df = df.iloc[i - lookback:i].copy()
+
+                    # Skip if window is too small (in case of gaps)
+                    if len(window_df) < lookback:
+                        continue
+
+                    # Extract features for this time point
+                    try:
+                        if horizon == 'short':
+                            features = FeatureEngineer.extract_short_term_features(window_df, lookback)
+                        elif horizon == 'medium':
+                            features = FeatureEngineer.extract_medium_term_features(window_df, lookback)
+                        else:
+                            features = FeatureEngineer.extract_long_term_features(window_df)
+
+                        # Check if features are valid
+                        if len(features) == 1 and features[0] == 0:
+                            # Invalid features (insufficient data)
+                            continue
+
+                        # Get label for this time point
+                        label = labels[i]
+
+                        # Use all samples (not excluding HOLD)
+                        # This is important for balanced training
+                        X_list.append(features)
+                        y_list.append(label)
+                        samples_count += 1
+
+                    except Exception as e:
+                        Logger.debug(f"{symbol}: Failed to extract features at index {i}: {str(e)}")
+                        continue
+
+                if samples_count > 0:
+                    Logger.debug(f"{symbol}: Extracted {samples_count} training samples")
+                else:
+                    Logger.warning(f"{symbol}: No valid samples extracted from {data_count} data points")
 
             except Exception as e:
                 Logger.warning(f"Failed to prepare data for {symbol}: {str(e)}")
@@ -119,9 +154,10 @@ class ModelTrainer:
 
         # Combine all samples
         X = np.vstack(X_list)
-        y = np.hstack(y_list)
+        y = np.array(y_list)
 
         Logger.info(f"Prepared {len(X)} training samples for {horizon} horizon")
+        Logger.info(f"Label distribution: Hold={np.sum(y==0)}, Buy={np.sum(y==1)}, Sell={np.sum(y==2)}")
 
         return X, y
 

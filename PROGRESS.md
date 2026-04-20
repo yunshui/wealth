@@ -154,6 +154,9 @@
 - 54a3acd: fix: use sequential processing for technical indicators update to avoid API rate limiting (v0.5.21)
 - 4c9f8e1: fix: handle empty data from baostock when date range is small (likely non-trading days) (v0.5.22)
 - 8a5f2b1: feat: add filename and line number to log format for better error tracking (v0.5.23)
+- 6937c92: docs: update all documentation with recent development changes (v0.5.24)
+- 3a6954e: chore: bump version to v0.5.24 for documentation update
+- 52a8e3a: fix: correct training data preparation logic for feature extraction (v0.5.25)
 
 **当前状态**: Stage 1-6 全部完成 ✅
 
