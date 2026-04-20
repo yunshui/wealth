@@ -956,9 +956,26 @@ def _update_indicators_data(storage: StockStorage):
                         result['error'] = error_msg
                         Logger.warning(f"{stock['symbol']}: {error_msg}")
                     else:
-                        error_msg = f'获取数据为空（起始日期: {stock_start_date}, 结束日期: {end_date}）'
-                        result['error'] = error_msg
-                        Logger.warning(f"{stock['symbol']}: {error_msg}")
+                        # Calculate the number of days in the requested range
+                        try:
+                            start_dt = datetime.strptime(stock_start_date, '%Y%m%d')
+                            end_dt = datetime.strptime(end_date, '%Y%m%d')
+                            days_range = (end_dt - start_dt).days + 1
+
+                            # If the range is small (<=5 days), it's likely non-trading days or data delay
+                            # Don't mark as failure, just log as no new data
+                            if days_range <= 5:
+                                result['success'] = True
+                                result['rows_processed'] = 0
+                                Logger.info(f"{stock['symbol']}: 请求日期范围较小（{days_range}天），可能为非交易日，无需更新")
+                            else:
+                                error_msg = f'获取数据为空（起始日期: {stock_start_date}, 结束日期: {end_date}）'
+                                result['error'] = error_msg
+                                Logger.warning(f"{stock['symbol']}: {error_msg}")
+                        except Exception as date_error:
+                            error_msg = f'获取数据为空（起始日期: {stock_start_date}, 结束日期: {end_date}）'
+                            result['error'] = error_msg
+                            Logger.warning(f"{stock['symbol']}: {error_msg}")
 
             except Exception as e:
                 result['error'] = str(e)

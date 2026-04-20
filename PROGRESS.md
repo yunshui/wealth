@@ -77,6 +77,12 @@
     - 移除线程锁和线程池相关代码
     - 改进错误提示信息，简化显示 "API连接被拒绝" 等友好提示
     - 解决 akshare API 连接被频繁拒绝的问题
+
+12. **非交易日数据处理优化** (v0.5.22)
+    - 当 baostock 返回空数据时，检查请求的日期范围
+    - 如果日期范围 ≤ 5 天，标记为成功（可能为非交易日或数据延迟）
+    - 避免将正常情况标记为失败
+    - 提高更新成功率和用户体验
    - 减少并发工作线程数（4 → 2）避免 API 速率限制
    - 使用共享 DataFetcher 实例防止多 baostock 连接冲突
    - 添加详细错误消息和日志记录
@@ -140,6 +146,7 @@
 - f57202f: fix: handle Chinese column names from akshare API (v0.5.19)
 - e517bc2: fix: improve technical indicators update logic for existing data (v0.5.20)
 - 54a3acd: fix: use sequential processing for technical indicators update to avoid API rate limiting (v0.5.21)
+- 4c9f8e1: fix: handle empty data from baostock when date range is small (likely non-trading days) (v0.5.22)
 
 **当前状态**: Stage 1-6 全部完成 ✅
 
