@@ -150,49 +150,71 @@ class FeatureEngineer:
             df: DataFrame with price columns
 
         Returns:
-            List of price features
+            List of price features (always same length: 9 features)
         """
         features = []
 
+        # Expected 9 price features
+        # 1. Current price
         if 'close' in df.columns:
-            # Current price
-            features.append(df['close'].iloc[-1])
+            features.append(float(df['close'].iloc[-1]))
+        else:
+            features.append(0.0)
 
-            # Returns over different periods
-            if len(df) > 1:
-                # 1-day return
-                ret_1 = (df['close'].iloc[-1] / df['close'].iloc[-2] - 1)
-                features.append(ret_1)
+        # 2. 1-day return
+        if 'close' in df.columns and len(df) > 1:
+            ret_1 = (df['close'].iloc[-1] / df['close'].iloc[-2] - 1)
+            features.append(float(ret_1))
+        else:
+            features.append(0.0)
 
-                # 5-day return
-                if len(df) > 5:
-                    ret_5 = (df['close'].iloc[-1] / df['close'].iloc[-5] - 1)
-                    features.append(ret_5)
-                else:
-                    features.append(0)
+        # 3. 5-day return
+        if 'close' in df.columns and len(df) > 5:
+            ret_5 = (df['close'].iloc[-1] / df['close'].iloc[-5] - 1)
+            features.append(float(ret_5))
+        else:
+            features.append(0.0)
 
-                # 10-day return
-                if len(df) > 10:
-                    ret_10 = (df['close'].iloc[-1] / df['close'].iloc[-10] - 1)
-                    features.append(ret_10)
-                else:
-                    features.append(0)
+        # 4. 10-day return
+        if 'close' in df.columns and len(df) > 10:
+            ret_10 = (df['close'].iloc[-1] / df['close'].iloc[-10] - 1)
+            features.append(float(ret_10))
+        else:
+            features.append(0.0)
 
-            # Volatility (rolling std of returns)
-            if len(df) > 10:
-                returns = df['close'].pct_change().dropna()
-                volatility = returns.tail(10).std()
-                features.append(volatility)
-            else:
-                features.append(0)
+        # 5. Volatility
+        if 'close' in df.columns and len(df) > 10:
+            returns = df['close'].pct_change().dropna()
+            volatility = returns.tail(10).std()
+            features.append(float(volatility) if not pd.isna(volatility) else 0.0)
+        else:
+            features.append(0.0)
 
-        # Open/High/Low ratios
-        if all(col in df.columns for col in ['open', 'high', 'low', 'close']):
+        # 6. OHLC ratio
+        if all(col in df.columns for col in ['open', 'close']) and len(df) > 0:
             ohlc_ratio = (df['close'].iloc[-1] - df['open'].iloc[-1]) / df['open'].iloc[-1]
-            features.append(ohlc_ratio)
+            features.append(float(ohlc_ratio))
+        else:
+            features.append(0.0)
 
+        # 7. HL ratio
+        if all(col in df.columns for col in ['high', 'low', 'close']) and len(df) > 0:
             hl_ratio = (df['high'].iloc[-1] - df['low'].iloc[-1]) / df['low'].iloc[-1]
-            features.append(hl_ratio)
+            features.append(float(hl_ratio))
+        else:
+            features.append(0.0)
+
+        # 8. Open price
+        if 'open' in df.columns:
+            features.append(float(df['open'].iloc[-1]))
+        else:
+            features.append(0.0)
+
+        # 9. High price
+        if 'high' in df.columns:
+            features.append(float(df['high'].iloc[-1]))
+        else:
+            features.append(0.0)
 
         return features
 
@@ -204,30 +226,32 @@ class FeatureEngineer:
             df: DataFrame with volume column
 
         Returns:
-            List of volume features
+            List of volume features (always same length: 3 features)
         """
         features = []
 
+        # 1. Current volume
         if 'volume' in df.columns:
-            # Current volume
-            features.append(df['volume'].iloc[-1])
+            features.append(float(df['volume'].iloc[-1]))
+        else:
+            features.append(0.0)
 
-            # Volume ratio vs average
-            if len(df) > 10:
-                avg_volume = df['volume'].tail(10).mean()
-                vol_ratio = df['volume'].iloc[-1] / avg_volume if avg_volume > 0 else 1
-                features.append(vol_ratio)
-            else:
-                features.append(1)
+        # 2. Volume ratio vs average
+        if 'volume' in df.columns and len(df) > 10:
+            avg_volume = df['volume'].tail(10).mean()
+            vol_ratio = df['volume'].iloc[-1] / avg_volume if avg_volume > 0 else 1.0
+            features.append(float(vol_ratio))
+        else:
+            features.append(1.0)
 
-            # Volume trend
-            if len(df) > 5:
-                recent_vol = df['volume'].tail(5).mean()
-                earlier_vol = df['volume'].tail(10).head(5).mean()
-                vol_trend = (recent_vol - earlier_vol) / earlier_vol if earlier_vol > 0 else 0
-                features.append(vol_trend)
-            else:
-                features.append(0)
+        # 3. Volume trend
+        if 'volume' in df.columns and len(df) > 10:
+            recent_vol = df['volume'].tail(5).mean()
+            earlier_vol = df['volume'].tail(10).head(5).mean()
+            vol_trend = (recent_vol - earlier_vol) / earlier_vol if earlier_vol > 0 else 0.0
+            features.append(float(vol_trend))
+        else:
+            features.append(0.0)
 
         return features
 
@@ -239,61 +263,30 @@ class FeatureEngineer:
             df: DataFrame with indicator columns
 
         Returns:
-            List of indicator features
+            List of indicator features (always same length)
         """
         features = []
 
-        # Moving averages
-        ma_cols = [col for col in df.columns if col.startswith('ma')]
-        for ma_col in ma_cols:
-            if ma_col in df.columns:
-                val = df[ma_col].iloc[-1]
-                if not pd.isna(val):
-                    features.append(val)
+        # Define expected indicator columns to ensure consistent feature count
+        expected_indicators = [
+            'ma5', 'ma10', 'ma20', 'ma60',
+            'macd', 'macd_signal', 'macd_hist',
+            'kdj_k', 'kdj_d', 'kdj_j',
+            'rsi6', 'rsi12', 'rsi24',
+            'boll_upper', 'boll_mid', 'boll_lower',
+            'obv'
+        ]
 
-        # MACD
-        if 'macd' in df.columns:
-            val = df['macd'].iloc[-1]
-            if not pd.isna(val):
-                features.append(val)
-        if 'macd_signal' in df.columns:
-            val = df['macd_signal'].iloc[-1]
-            if not pd.isna(val):
-                features.append(val)
-        if 'macd_hist' in df.columns:
-            val = df['macd_hist'].iloc[-1]
-            if not pd.isna(val):
-                features.append(val)
-
-        # KDJ
-        kdj_cols = [col for col in df.columns if col.startswith('kdj_')]
-        for kdj_col in kdj_cols:
-            if kdj_col in df.columns:
-                val = df[kdj_col].iloc[-1]
-                if not pd.isna(val):
-                    features.append(val)
-
-        # RSI
-        rsi_cols = [col for col in df.columns if col.startswith('rsi')]
-        for rsi_col in rsi_cols:
-            if rsi_col in df.columns:
-                val = df[rsi_col].iloc[-1]
-                if not pd.isna(val):
-                    features.append(val)
-
-        # Bollinger Bands
-        boll_cols = [col for col in df.columns if col.startswith('boll_')]
-        for boll_col in boll_cols:
-            if boll_col in df.columns:
-                val = df[boll_col].iloc[-1]
-                if not pd.isna(val):
-                    features.append(val)
-
-        # OBV
-        if 'obv' in df.columns:
-            val = df['obv'].iloc[-1]
-            if not pd.isna(val):
-                features.append(val)
+        # Extract each indicator, defaulting to 0 if missing or NaN
+        for indicator in expected_indicators:
+            if indicator in df.columns:
+                val = df[indicator].iloc[-1]
+                if pd.isna(val):
+                    features.append(0.0)
+                else:
+                    features.append(float(val))
+            else:
+                features.append(0.0)
 
         return features
 

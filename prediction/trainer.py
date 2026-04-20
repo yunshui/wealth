@@ -104,6 +104,8 @@ class ModelTrainer:
                 end_idx = len(df) - label_horizon
 
                 samples_count = 0
+                first_feature_count = None
+
                 for i in range(start_idx, end_idx):
                     # Get lookback window
                     window_df = df.iloc[i - lookback:i].copy()
@@ -120,6 +122,12 @@ class ModelTrainer:
                             features = FeatureEngineer.extract_medium_term_features(window_df, lookback)
                         else:
                             features = FeatureEngineer.extract_long_term_features(window_df)
+
+                        # Track feature count for consistency check
+                        if first_feature_count is None:
+                            first_feature_count = len(features)
+                        elif len(features) != first_feature_count:
+                            Logger.warning(f"{symbol}: Feature count mismatch! Expected {first_feature_count}, got {len(features)} at index {i}")
 
                         # Check if features are valid
                         if len(features) == 1 and features[0] == 0:
@@ -140,7 +148,7 @@ class ModelTrainer:
                         continue
 
                 if samples_count > 0:
-                    Logger.debug(f"{symbol}: Extracted {samples_count} training samples")
+                    Logger.debug(f"{symbol}: Extracted {samples_count} training samples (feature_dim={first_feature_count})")
                 else:
                     Logger.warning(f"{symbol}: No valid samples extracted from {data_count} data points")
 
@@ -152,11 +160,24 @@ class ModelTrainer:
             Logger.warning("No valid training samples found")
             return np.array([]), np.array([])
 
+        # Validate all feature vectors have the same dimension
+        feature_dims = [len(x) for x in X_list]
+        unique_dims = set(feature_dims)
+
+        if len(unique_dims) > 1:
+            Logger.error(f"Feature dimension mismatch! Found {len(unique_dims)} different dimensions: {sorted(unique_dims)}")
+            Logger.error("This will cause np.vstack to fail. Please check feature extraction logic.")
+            # Log samples of each dimension for debugging
+            for dim in sorted(unique_dims):
+                count = feature_dims.count(dim)
+                Logger.error(f"  - {count} samples with dimension {dim}")
+            return np.array([]), np.array([])
+
         # Combine all samples
         X = np.vstack(X_list)
         y = np.array(y_list)
 
-        Logger.info(f"Prepared {len(X)} training samples for {horizon} horizon")
+        Logger.info(f"Prepared {len(X)} training samples for {horizon} horizon (feature_dim={X.shape[1]})")
         Logger.info(f"Label distribution: Hold={np.sum(y==0)}, Buy={np.sum(y==1)}, Sell={np.sum(y==2)}")
 
         return X, y

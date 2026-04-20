@@ -89,11 +89,23 @@
     - 格式：`YYYY-MM-DD HH:MM:SS - wealth - LEVEL - filename:lineno - message`
     - 方便快速定位错误来源
     - 提升调试效率
-   - 减少并发工作线程数（4 → 2）避免 API 速率限制
-   - 使用共享 DataFetcher 实例防止多 baostock 连接冲突
-   - 添加详细错误消息和日志记录
-   - 改进 None 和空数据的错误处理
-   - 在错误信息中包含日期范围信息便于诊断
+
+14. **训练数据准备逻辑修复** (v0.5.25)
+    - 修复特征提取逻辑错误
+    - 原问题：对单个特征向量进行时间序列切片导致索引错误
+    - 新逻辑：为每个时间点单独提取特征
+    - 添加详细日志记录每只股票提取的样本数
+    - 解决 "No training data available" 错误
+
+15. **特征维度一致性修复** (v0.5.26)
+    - 修复特征维度不一致导致 np.vstack 失败的问题
+    - 原问题：不同股票的技术指标 NaN 值导致特征数量不同
+    - 新逻辑：所有特征提取函数返回固定数量的特征（NaN 填充为 0）
+    - 价格特征：9 个固定特征
+    - 成交量特征：3 个固定特征
+    - 指标特征：18 个固定特征（ma5, ma10, ma20, ma60, macd, macd_signal, macd_hist, kdj_k, kdj_d, kdj_j, rsi6, rsi12, rsi24, boll_upper, boll_mid, boll_lower, obv）
+    - 添加特征维度验证，提前发现维度不一致问题
+    - 解决 "all the input array dimensions for the concatenation axis must match exactly" 错误
 
 8. **日志按天记录** (v0.5.18)
    - 使用 `TimedRotatingFileHandler` 实现日志按天分割
@@ -157,6 +169,7 @@
 - 6937c92: docs: update all documentation with recent development changes (v0.5.24)
 - 3a6954e: chore: bump version to v0.5.24 for documentation update
 - 52a8e3a: fix: correct training data preparation logic for feature extraction (v0.5.25)
+- 8c7f9d1: fix: ensure consistent feature dimensions across all training samples (v0.5.26)
 
 **当前状态**: Stage 1-6 全部完成 ✅
 
