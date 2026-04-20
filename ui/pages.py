@@ -68,6 +68,8 @@ def show_homepage():
         if not sector:
             return
 
+        sector_id = sector['sector_id']
+
         # Update button
         col1, col2, col3 = st.columns([3, 1, 1])
         with col2:
@@ -78,13 +80,29 @@ def show_homepage():
             load_data_button = st.button("⬇️ 加载股票", use_container_width=True, key="load_stocks_home")
 
         # Session state for tracking loaded stocks
-        if f"loaded_stocks_{sector['sector_id']}" not in st.session_state:
-            st.session_state[f"loaded_stocks_{sector['sector_id']}"] = False
+        if f"loading_stocks_{sector_id}" not in st.session_state:
+            st.session_state[f"loading_stocks_{sector_id}"] = False
+            st.session_state[f"loaded_stocks_{sector_id}"] = False
+            st.session_state[f"load_progress_{sector_id}"] = {"total": 0, "current": 0}
 
-        # Async load stocks when button is clicked
-        if load_data_button or st.session_state[f"loaded_stocks_{sector['sector_id']}"]:
-            st.session_state[f"loaded_stocks_{sector['sector_id']}"] = True
-            _async_load_sector_stocks(storage, sector['sector_id'])
+        # Initialize loading when button is clicked
+        if load_data_button:
+            st.session_state[f"loading_stocks_{sector_id}"] = True
+            st.session_state[f"loaded_stocks_{sector_id}"] = False
+
+        # Show loading progress if loading
+        if st.session_state[f"loading_stocks_{sector_id}"]:
+            progress = st.session_state[f"load_progress_{sector_id}"]
+            if progress["total"] > 0:
+                st.info(f"⏳ 正在加载股票数据... ({progress['current']}/{progress['total']})")
+            else:
+                st.info("⏳ 正在加载股票数据...")
+
+            # Load a batch of stocks (non-blocking by limiting batch size)
+            _load_sector_stocks_batch(storage, sector_id, batch_size=3)
+
+            # Rerun to continue loading
+            st.rerun()
 
         # Sector leaders - always show what's available in database first
         leaders = storage.get_sector_leaders(sector['sector_id'])
@@ -92,11 +110,15 @@ def show_homepage():
         if leaders:
             render_card(
                 f"{sector['sector_name']} - 龙头股列表",
-                lambda: _render_leaders_table(leaders, storage, sector['sector_id']),
+                lambda: _render_leaders_table(leaders, storage, sector_id),
                 "🏆"
             )
         else:
-            st.info("该板块暂无龙头股数据")
+            # Show different message based on loading status
+            if st.session_state.get(f"loading_stocks_{sector_id}", False):
+                st.info("⏳ 正在加载板块股票数据...")
+            else:
+                st.info("该板块暂无龙头股数据，请点击上方「加载股票」按钮获取")
 
         # Sector trend chart placeholder
         render_card(
@@ -109,33 +131,31 @@ def show_homepage():
         db_manager.close()
 
 
-def _async_load_sector_stocks(storage: StockStorage, sector_id: str):
-    """Async load stock information for sector from API.
+def _load_sector_stocks_batch(storage: StockStorage, sector_id: str, batch_size: int = 3):
+    """Load stocks in batches to avoid blocking the UI.
 
-    This function loads stock information for stocks in the sector
-    that don't exist in the database yet.
+    This function loads a small batch of stocks at a time,
+    then returns to allow the UI to update.
 
     Args:
         storage: StockStorage instance
         sector_id: Sector ID
+        batch_size: Number of stocks to load per batch
     """
     from data.fetcher import DataFetcher
     from utils.config import Config
-    import json
 
     try:
-        # Get sector info from database to find the sector name
+        # Get sector info from database
         sector_info = storage.get_sector_by_id(sector_id)
         if not sector_info:
-            Logger.warning(f"Sector {sector_id} not found in database")
+            st.session_state[f"loading_stocks_{sector_id}"] = False
             return
 
         sector_name = sector_info['sector_name']
 
-        # Get configured stocks from config file
+        # Get configured stocks from config
         sectors_config = Config.get_major_sectors_config()
-
-        # Find the sector config by name
         sector_config = None
         for sc in sectors_config:
             if sc['name'] == sector_name:
@@ -143,14 +163,12 @@ def _async_load_sector_stocks(storage: StockStorage, sector_id: str):
                 break
 
         if not sector_config:
-            Logger.warning(f"Sector {sector_name} not found in config")
+            st.session_state[f"loading_stocks_{sector_id}"] = False
             return
 
-        # Get stocks from config
         configured_stocks = sector_config.get('stocks', [])
-
         if not configured_stocks:
-            Logger.warning(f"No stocks configured for sector {sector_name}")
+            st.session_state[f"loading_stocks_{sector_id}"] = False
             return
 
         # Check which stocks are missing from database
@@ -160,23 +178,37 @@ def _async_load_sector_stocks(storage: StockStorage, sector_id: str):
             if not stock:
                 missing_symbols.append(symbol)
 
-        if not missing_symbols:
-            Logger.info(f"All stocks already loaded for sector {sector_name}")
+        # Get progress tracking
+        loaded_symbols_key = f"loaded_symbols_{sector_id}"
+        if loaded_symbols_key not in st.session_state:
+            st.session_state[loaded_symbols_key] = set()
+
+        loaded_symbols = st.session_state[loaded_symbols_key]
+        remaining_symbols = [s for s in missing_symbols if s not in loaded_symbols]
+
+        if not remaining_symbols:
+            # All stocks loaded
+            st.session_state[f"loading_stocks_{sector_id}"] = False
+            st.session_state[f"loaded_stocks_{sector_id}"] = True
+            del st.session_state[loaded_symbols_key]
             return
 
-        Logger.info(f"Loading {len(missing_symbols)} missing stocks for sector {sector_name}")
+        # Update progress
+        st.session_state[f"load_progress_{sector_id}"] = {
+            "total": len(missing_symbols),
+            "current": len(loaded_symbols)
+        }
 
-        # Fetch stock info for missing stocks
+        # Load a batch of stocks
         fetcher = DataFetcher()
+        batch_to_load = remaining_symbols[:batch_size]
 
-        for symbol in missing_symbols:
+        for symbol in batch_to_load:
             try:
-                # Get stock info from akshare
                 clean_symbol = symbol.split('.')[0]
                 info = fetcher.get_stock_info(clean_symbol)
 
                 if info:
-                    # Create stock data dict
                     stock_data = {
                         'symbol': symbol,
                         'name': info.get('股票简称', f'股票{symbol}'),
@@ -187,18 +219,23 @@ def _async_load_sector_stocks(storage: StockStorage, sector_id: str):
                         'pb_ratio': _parse_float(info.get('市净率', '0'))
                     }
                     storage.save_stock(stock_data)
-                    Logger.debug(f"Loaded stock info for {symbol}: {stock_data['name']}")
-                else:
-                    Logger.warning(f"Failed to get stock info for {symbol}: API returned empty data")
+                    st.session_state[loaded_symbols_key].add(symbol)
 
             except Exception as e:
                 Logger.warning(f"Failed to load stock info for {symbol}: {str(e)}")
                 continue
 
-        Logger.info(f"Finished loading stocks for sector {sector_name}")
-
     except Exception as e:
-        Logger.error(f"Failed to async load sector stocks: {str(e)}")
+        Logger.error(f"Failed to load sector stocks batch: {str(e)}")
+        st.session_state[f"loading_stocks_{sector_id}"] = False
+
+
+def _async_load_sector_stocks(storage: StockStorage, sector_id: str):
+    """Legacy async load function (deprecated).
+
+    Use _load_sector_stocks_batch() instead for non-blocking loading.
+    """
+    _load_sector_stocks_batch(storage, sector_id, batch_size=10)
 
 
 def _parse_market_cap(value: str) -> float:
@@ -277,14 +314,21 @@ def _render_leaders_table(leaders: list, storage: StockStorage, sector_id: str =
 
     # Show data loading status
     if sector_id:
-        loaded_stocks = st.session_state.get(f"loaded_stocks_{sector_id}", False)
+        loading_stocks = st.session_state.get(f"loading_stocks_{sector_id}", False)
         unknown_count = sum(df['name'] == 'Unknown')
 
         if unknown_count > 0:
-            if not loaded_stocks:
-                st.caption(f"⚠️ {unknown_count} 只股票信息未加载，点击上方「加载股票」按钮")
+            if loading_stocks:
+                progress = st.session_state.get(f"load_progress_{sector_id}", {})
+                total = progress.get("total", unknown_count)
+                current = progress.get("current", 0)
+                st.caption(f"⏳ 正在加载股票数据 ({current}/{total})")
             else:
-                st.caption(f"⏳ 正在加载 {unknown_count} 只股票信息...")
+                st.caption(f"⚠️ {unknown_count} 只股票信息未加载，点击「加载股票」按钮获取")
+        else:
+            # All stocks loaded
+            if st.session_state.get(f"loaded_stocks_{sector_id}", False):
+                st.success("✅ 股票信息已全部加载")
 
     st.dataframe(
         df_display,

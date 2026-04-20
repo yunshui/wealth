@@ -135,6 +135,13 @@
     - 提升页面响应速度和用户体验
     - 显示未加载股票的数量和加载状态
 
+12. **非阻塞渐进式加载** (v0.5.28)
+    - 使用批次加载机制（每批 3 只股票）避免阻塞 UI
+    - 显示实时加载进度 (x/y)
+    - 分批加载后自动刷新页面继续加载
+    - 改进空数据提示信息，引导用户点击加载按钮
+    - 加载完成后显示成功提示
+
 **经验教训**:
 
 1. **配置驱动设计的重要性**
@@ -178,6 +185,7 @@
 - 52a8e3a: fix: correct training data preparation logic for feature extraction (v0.5.25)
 - 8c7f9d1: fix: ensure consistent feature dimensions across all training samples (v0.5.26)
 - 7a2f5e8: feat: add async stock loading for sector detail page (v0.5.27)
+- 9b3c2d1: fix: implement non-blocking progressive stock loading with batch processing (v0.5.28)
 
 **当前状态**: Stage 1-6 全部完成 ✅
 
