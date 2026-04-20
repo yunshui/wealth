@@ -48,6 +48,35 @@
    - 显示详细的成功/失败统计
 
 7. **技术指标更新错误处理优化** (v0.5.17)
+   - 添加数据有效性验证，确保必需列存在
+   - 改进错误信息显示，包含具体缺失列名
+   - 使用 `pd.to_numeric(..., errors='coerce')` 处理数据类型转换
+   - 防止因无效数据导致后续处理失败
+
+8. **日志轮转优化** (v0.5.18)
+   - `utils/logger.py`: 使用 `TimedRotatingFileHandler` 实现按天轮转
+   - 日志文件保留 30 天，过期自动删除
+   - 日志文件名格式：`app.log.YYYY-MM-DD`
+   - 优化日志存储，避免单个文件过大
+
+9. **中文列名处理** (v0.5.19)
+   - `data/fetcher.py`: 添加 COLUMN_MAPPING 字典
+   - 自动检测和转换中文列名为英文
+   - 支持 akshare API 返回的中文列名格式
+   - 提高数据获取的兼容性
+
+10. **技术指标更新逻辑优化** (v0.5.20)
+    - 添加日期比较检查，避免已有最新数据的股票被标记为失败
+    - 当 `start_date > end_date` 时，标记为成功且无需更新
+    - 修复了39只股票被错误标记为失败的问题
+    - 提高数据更新的准确性
+
+11. **技术指标更新串行化优化** (v0.5.21)
+    - 从并发处理（max_workers=2）改为串行处理
+    - 在每个请求之间添加 0.5 秒延迟，避免 API 速率限制
+    - 移除线程锁和线程池相关代码
+    - 改进错误提示信息，简化显示 "API连接被拒绝" 等友好提示
+    - 解决 akshare API 连接被频繁拒绝的问题
    - 减少并发工作线程数（4 → 2）避免 API 速率限制
    - 使用共享 DataFetcher 实例防止多 baostock 连接冲突
    - 添加详细错误消息和日志记录
@@ -110,6 +139,7 @@
 - 2394e23: feat: implement daily log rotation for better log management (v0.5.18)
 - f57202f: fix: handle Chinese column names from akshare API (v0.5.19)
 - e517bc2: fix: improve technical indicators update logic for existing data (v0.5.20)
+- 54a3acd: fix: use sequential processing for technical indicators update to avoid API rate limiting (v0.5.21)
 
 **当前状态**: Stage 1-6 全部完成 ✅
 

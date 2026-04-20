@@ -4,8 +4,7 @@ import streamlit as st
 import pandas as pd
 from datetime import datetime, timedelta
 from typing import Dict
-from concurrent.futures import ThreadPoolExecutor, as_completed
-import threading
+import time
 
 from data.storage import StockStorage
 from data.database import DatabaseManager
@@ -877,8 +876,7 @@ def _update_indicators_data(storage: StockStorage):
 
         update_placeholder.info(f"正在更新 {len(stocks_list)} 只配置股票的技术指标...")
 
-        # Thread-safe counters
-        total_lock = threading.Lock()
+        # Sequential processing counters
         processed_count = 0
         failed_count = 0
         total = len(stocks_list)
@@ -887,29 +885,12 @@ def _update_indicators_data(storage: StockStorage):
         end_date = datetime.now().strftime('%Y%m%d')
         start_date = Config.get_data_start_date().replace('-', '')
 
-        # Create shared fetcher instance to avoid multiple baostock connections
-        shared_fetcher = DataFetcher()
+        # Create fetcher instance for all requests
+        fetcher = DataFetcher()
+        calculator = IndicatorCalculator()
 
-        def process_stock(stock: Dict) -> Dict:
-            """Process a single stock and return result.
-
-            Args:
-                stock: Stock dictionary
-
-            Returns:
-                Result dictionary with status and info
-            """
-            nonlocal processed_count
-            nonlocal failed_count
-
-            # Use a separate storage instance for each thread
-            db = DatabaseManager()
-            thread_storage = StockStorage(db)
-            thread_calculator = IndicatorCalculator()
-
-            # Use shared fetcher instance
-            thread_fetcher = shared_fetcher
-
+        # Process stocks sequentially to avoid API rate limiting
+        for idx, stock in enumerate(stocks_list):
             result = {
                 'symbol': stock['symbol'],
                 'success': False,
@@ -918,10 +899,10 @@ def _update_indicators_data(storage: StockStorage):
             }
 
             try:
-                Logger.info(f"开始处理股票: {stock['symbol']}")
+                Logger.info(f"开始处理股票 ({idx + 1}/{total}): {stock['symbol']}")
 
                 # Get latest date in database for incremental update
-                latest_date = thread_storage.get_stock_latest_date(stock['symbol'])
+                latest_date = storage.get_stock_latest_date(stock['symbol'])
                 if latest_date:
                     # Convert YYYY-MM-DD to YYYYMMDD and add 1 day
                     latest_dt = datetime.strptime(latest_date, '%Y-%m-%d')
@@ -941,7 +922,7 @@ def _update_indicators_data(storage: StockStorage):
                     Logger.info(f"{stock['symbol']}: 已有最新数据 ({latest_date})，无需更新")
                 else:
                     # Fetch data from akshare
-                    history_df = thread_fetcher.get_stock_history(stock['symbol'], stock_start_date, end_date)
+                    history_df = fetcher.get_stock_history(stock['symbol'], stock_start_date, end_date)
 
                     if history_df is not None and not history_df.empty:
                         Logger.info(f"{stock['symbol']}: 获取到 {len(history_df)} 条数据")
@@ -956,10 +937,10 @@ def _update_indicators_data(storage: StockStorage):
                             Logger.warning(f"{stock['symbol']}: {error_msg}, 实际列: {list(history_df.columns)}")
                         else:
                             # Calculate indicators
-                            df_with_indicators = thread_calculator.calculate_all(history_df)
+                            df_with_indicators = calculator.calculate_all(history_df)
 
                             # Save updated data with current timestamp
-                            inserted_count = thread_storage.save_stock_data_incremental(df_with_indicators)
+                            inserted_count = storage.save_stock_data_incremental(df_with_indicators)
 
                             if inserted_count > 0:
                                 result['success'] = True
@@ -984,33 +965,26 @@ def _update_indicators_data(storage: StockStorage):
                 Logger.error(f"{stock['symbol']}: 处理失败 - {str(e)}")
 
             finally:
-                # Update progress safely
-                with total_lock:
-                    processed_count += 1
-                    if not result['success']:
-                        failed_count += 1
+                # Update progress
+                processed_count += 1
+                if not result['success']:
+                    failed_count += 1
 
-            return result
+                # Update progress display
+                if result['success']:
+                    progress_placeholder.info(f"进度: {processed_count}/{total} 只股票 (成功: {processed_count - failed_count}, 失败: {failed_count})")
+                else:
+                    error_info = result.get('error', '未知错误')
+                    # 提取错误摘要信息
+                    if 'Connection aborted' in error_info or 'RemoteDisconnected' in error_info:
+                        error_info = "API连接被拒绝"
+                    elif 'API返回None' in error_info:
+                        error_info = "API返回空值"
+                    progress_placeholder.warning(f"进度: {processed_count}/{total} 只股票 (成功: {processed_count - failed_count}, 失败: {failed_count}) - {stock['symbol']}: {error_info}")
 
-        # Process stocks sequentially for better error handling and progress updates
-        max_workers = 2  # Reduce to 2 to avoid API rate limiting and connection issues
-
-        with ThreadPoolExecutor(max_workers=max_workers) as executor:
-            # Submit all tasks
-            futures = {executor.submit(process_stock, stock): stock for stock in stocks_list}
-
-            # Process completed tasks and update progress
-            for future in as_completed(futures):
-                stock = futures[future]
-                try:
-                    result = future.result()
-                    # Update progress display
-                    if result['success']:
-                        progress_placeholder.info(f"进度: {processed_count}/{total} 只股票 (成功: {processed_count - failed_count}, 失败: {failed_count})")
-                    else:
-                        progress_placeholder.warning(f"进度: {processed_count}/{total} 只股票 (成功: {processed_count - failed_count}, 失败: {failed_count}) - {stock['symbol']}: {result.get('error', '未知错误')}")
-                except Exception as e:
-                    progress_placeholder.error(f"进度: {processed_count}/{total} 只股票 - {stock['symbol']}: 处理异常: {str(e)}")
+            # Add delay between requests to avoid rate limiting (except for last item)
+            if idx < total - 1:
+                time.sleep(0.5)
 
         if failed_count == 0:
             st.success(f"✅ 技术指标更新完成! 共处理 {processed_count} 只股票")
