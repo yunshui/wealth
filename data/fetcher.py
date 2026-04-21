@@ -217,7 +217,7 @@ class DataFetcher:
                 period="daily",
                 start_date=start_date,
                 end_date=end_date,
-                adjust="hfq",  # 前复权
+                adjust="",  # 不复权
                 cache_key=cache_key
             )
 
@@ -300,7 +300,7 @@ class DataFetcher:
                 start_date=bs_start_date,
                 end_date=bs_end_date,
                 frequency="d",
-                adjustflag="1"  # 1: 前复权
+                adjustflag="3"  # 3: 不复权
             )
 
             data_list = []
