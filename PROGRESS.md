@@ -2,6 +2,17 @@
 
 ## 项目进度记录
 
+### 2026-04-20 - 提交代码 v0.5.40 ✅
+
+**已完成**:
+
+1. **提交代码** (v0.5.40)
+   - 提交所有修改到 git 仓库
+   - 推送到远程仓库 origin/main
+   - 提交消息: feat: simplify sector analysis page and add stock name management (v0.5.40)
+   - 包含文件: app.py, data/storage.py, ui/pages.py, utils/config.py, update_stock_names.py
+   - 文档更新: PROGRESS.md, README.md
+
 ### 2026-04-20 - 批量更新股票名称到 stocks 表 ✅
 
 **已完成**:

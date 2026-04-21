@@ -100,12 +100,36 @@ streamlit run app.py
 3. **数据更新**：
    - 每日收盘后更新数据
    - 检查数据库状态
+   - 板块分析页面可直接点击"更新数据"按钮更新当前板块
+
+### 工具脚本
+
+#### update_stock_names.py - 批量更新股票名称
+
+当股票名称显示异常时，可以使用此工具脚本批量更新：
+
+```bash
+# 运行批量更新脚本
+python update_stock_names.py
+```
+
+**功能**：
+- 从 akshare API 获取所有配置股票的名称
+- 批量更新到 stocks 表
+- 自动跳过已存在的股票名称
+- 显示更新进度和结果统计
+
+**使用场景**：
+- 首次安装后初始化股票名称
+- 股票名称显示占位符时
+- 配置新增股票后
 
 ## 项目架构
 
 ```
 wealth/
 ├── app.py                    # Streamlit主应用
+├── update_stock_names.py      # 批量更新股票名称工具脚本
 ├── requirements.txt          # Python依赖
 ├── PROGRESS.md               # 项目进度
 ├── config/                   # 配置文件

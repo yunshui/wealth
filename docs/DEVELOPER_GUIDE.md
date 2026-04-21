@@ -16,6 +16,7 @@
 ```
 wealth/
 ├── app.py                       # Streamlit主应用
+├── update_stock_names.py         # 批量更新股票名称工具脚本
 ├── requirements.txt             # Python依赖
 ├── CLAUDE.md                    # Claude Code项目说明
 ├── README.md                    # 项目概述
