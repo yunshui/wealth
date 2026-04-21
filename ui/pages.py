@@ -5,6 +5,7 @@ import pandas as pd
 from datetime import datetime, timedelta
 from typing import Dict
 import time
+import threading
 
 from data.storage import StockStorage
 from data.database import DatabaseManager
