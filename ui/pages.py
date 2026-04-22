@@ -986,7 +986,7 @@ def _update_stocks_data(storage: StockStorage):
                             if latest_date:
                                 # Convert YYYY-MM-DD to YYYYMMDD and add 1 day
                                 from datetime import timedelta
-                                latest_dt = dt.strptime(latest_date, '%Y-%m-%d')
+                                latest_dt = datetime.strptime(latest_date, '%Y-%m-%d')
                                 next_date = (latest_dt + timedelta(days=1)).strftime('%Y%m%d')
                                 stock_start_date = next_date
                             else:
