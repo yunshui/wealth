@@ -1,6 +1,7 @@
 """Data fetcher module - akshare API wrapper with retry and cache."""
 
 import time
+import threading
 import akshare as ak
 import baostock as bs
 import pandas as pd
@@ -278,61 +279,84 @@ class DataFetcher:
             DataFrame with OHLCV data
         """
         Logger.info(f"Fetching stock history from baostock: {symbol}")
-        try:
-            # Convert symbol to baostock format
-            clean_symbol = symbol.split('.')[0]
-            if symbol.endswith('.SH'):
-                bs_symbol = f"sh.{clean_symbol}"
-            elif symbol.endswith('.SZ'):
-                bs_symbol = f"sz.{clean_symbol}"
-            else:
-                # Try to guess based on first digit
-                bs_symbol = f"sh.{clean_symbol}" if clean_symbol.startswith('6') else f"sz.{clean_symbol}"
 
-            # Convert date format from YYYYMMDD to YYYY-MM-DD
-            bs_start_date = f"{start_date[:4]}-{start_date[4:6]}-{start_date[6:8]}" if start_date else ""
-            bs_end_date = f"{end_date[:4]}-{end_date[4:6]}-{end_date[6:8]}" if end_date else ""
+        # Result container for threading
+        result_container = {'result': None, 'error': None}
 
-            # Query baostock
-            rs = bs.query_history_k_data_plus(
-                bs_symbol,
-                "date,code,open,high,low,close,preclose,volume,amount,pctChg,turn",
-                start_date=bs_start_date,
-                end_date=bs_end_date,
-                frequency="d",
-                adjustflag="3"  # 3: 不复权
-            )
+        def _fetch_data():
+            try:
+                # Convert symbol to baostock format
+                clean_symbol = symbol.split('.')[0]
+                if symbol.endswith('.SH'):
+                    bs_symbol = f"sh.{clean_symbol}"
+                elif symbol.endswith('.SZ'):
+                    bs_symbol = f"sz.{clean_symbol}"
+                else:
+                    # Try to guess based on first digit
+                    bs_symbol = f"sh.{clean_symbol}" if clean_symbol.startswith('6') else f"sz.{clean_symbol}"
 
-            data_list = []
-            while (rs.error_code == '0') & rs.next():
-                data_list.append(rs.get_row_data())
+                # Convert date format from YYYYMMDD to YYYY-MM-DD
+                bs_start_date = f"{start_date[:4]}-{start_date[4:6]}-{start_date[6:8]}" if start_date else ""
+                bs_end_date = f"{end_date[:4]}-{end_date[4:6]}-{end_date[6:8]}" if end_date else ""
 
-            result = pd.DataFrame(data_list, columns=rs.fields)
+                # Query baostock
+                rs = bs.query_history_k_data_plus(
+                    bs_symbol,
+                    "date,code,open,high,low,close,preclose,volume,amount,pctChg,turn",
+                    start_date=bs_start_date,
+                    end_date=bs_end_date,
+                    frequency="d",
+                    adjustflag="3"  # 3: 不复权
+                )
 
-            if result.empty:
-                Logger.warning(f"baostock returned empty data for {symbol}")
-                return pd.DataFrame()
+                data_list = []
+                while (rs.error_code == '0') & rs.next():
+                    data_list.append(rs.get_row_data())
 
-            # Convert data types
-            numeric_columns = ['open', 'high', 'low', 'close', 'preclose', 'volume', 'amount', 'pctChg', 'turn']
-            for col in numeric_columns:
-                result[col] = pd.to_numeric(result[col], errors='coerce')
+                result = pd.DataFrame(data_list, columns=rs.fields)
 
-            # Rename 'code' to 'symbol' and convert format
-            result['symbol'] = result['code'].apply(lambda x: x.replace('sh.', '').replace('sz.', '') + '.SH' if x.startswith('sh.') else x.replace('sh.', '').replace('sz.', '') + '.SZ')
+                if result.empty:
+                    Logger.warning(f"baostock returned empty data for {symbol}")
+                    result_container['result'] = pd.DataFrame()
+                    return
 
-            # Convert date format from YYYY-MM-DD to YYYYMMDD
-            result['date'] = result['date'].str.replace('-', '')
+                # Convert data types
+                numeric_columns = ['open', 'high', 'low', 'close', 'preclose', 'volume', 'amount', 'pctChg', 'turn']
+                for col in numeric_columns:
+                    result[col] = pd.to_numeric(result[col], errors='coerce')
 
-            # Select and reorder columns to match akshare format
-            result = result[['date', 'symbol', 'open', 'high', 'low', 'close', 'volume', 'amount']].copy()
+                # Rename 'code' to 'symbol' and convert format
+                result['symbol'] = result['code'].apply(lambda x: x.replace('sh.', '').replace('sz.', '') + '.SH' if x.startswith('sh.') else x.replace('sh.', '').replace('sz.', '') + '.SZ')
 
-            Logger.info(f"Successfully fetched {len(result)} records from baostock for {symbol}")
-            return result
+                # Convert date format from YYYY-MM-DD to YYYYMMDD
+                result['date'] = result['date'].str.replace('-', '')
 
-        except Exception as e:
-            Logger.error(f"Failed to fetch stock history from baostock: {str(e)}")
-            raise DataFetchException(f"Failed to fetch stock history from baostock: {str(e)}")
+                # Select and reorder columns to match akshare format
+                result = result[['date', 'symbol', 'open', 'high', 'low', 'close', 'volume', 'amount']].copy()
+
+                Logger.info(f"Successfully fetched {len(result)} records from baostock for {symbol}")
+                result_container['result'] = result
+
+            except Exception as e:
+                result_container['error'] = str(e)
+
+        # Create and start thread with timeout
+        thread = threading.Thread(target=_fetch_data)
+        thread.daemon = True
+        thread.start()
+
+        # Wait for completion with 1 minute timeout
+        timeout_seconds = 60  # 1 minute
+        thread.join(timeout=timeout_seconds)
+
+        if thread.is_alive():
+            Logger.warning(f"baostock request timeout after {timeout_seconds}s for {symbol}")
+            raise DataFetchException(f"baostock request timeout after {timeout_seconds}s")
+
+        if result_container['error']:
+            raise DataFetchException(f"Failed to fetch stock history from baostock: {result_container['error']}")
+
+        return result_container['result'] if result_container['result'] is not None else pd.DataFrame()
 
     def __del__(self):
         """Cleanup baostock connection."""

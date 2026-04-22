@@ -1097,3 +1097,188 @@ history_df = fetcher.get_stock_history(symbol, next_date, today)
 2. 避免数据冗余（如股票名称不在多个表中存储）
 3. 使用 LEFT JOIN 保证数据完整性
 4. 添加占位符处理边界情况
+
+---
+
+## 28. baostock 请求超时控制
+
+### 问题
+```python
+# baostock 请求无限等待导致应用卡死
+# 11年历史数据，约2700个交易日，baostock 查询可能非常慢
+# 用户点击"更新股票数据"后，页面长时间不动
+```
+
+### 原因
+- baostock 查询长时间历史数据时可能非常慢
+- 没有超时控制，导致请求无限等待
+- 单只股票超时影响整个更新进度
+- 用户体验差
+
+### 解决方案
+```python
+# 使用 threading 实现超时控制
+import threading
+
+def _get_stock_history_baostock(self, symbol, start_date, end_date):
+    result_container = {'result': None, 'error': None}
+
+    def _fetch_data():
+        try:
+            # 执行 baostock 查询
+            rs = bs.query_history_k_data_plus(...)
+            # 处理数据
+            result_container['result'] = result
+        except Exception as e:
+            result_container['error'] = str(e)
+
+    # 创建并启动线程
+    thread = threading.Thread(target=_fetch_data)
+    thread.daemon = True
+    thread.start()
+
+    # 等待完成，设置超时
+    timeout_seconds = 60  # 1分钟
+    thread.join(timeout=timeout_seconds)
+
+    # 检查是否超时
+    if thread.is_alive():
+        Logger.warning(f"baostock request timeout after {timeout_seconds}s for {symbol}")
+        raise DataFetchException(f"baostock request timeout after {timeout_seconds}s")
+
+    return result_container['result'] if result_container['result'] else pd.DataFrame()
+```
+
+### 经验教训
+- 外部 API 请求必须设置超时控制
+- 使用 threading 可以在阻塞操作上实现超时
+- 超时时间应该根据实际情况调整（1-5分钟）
+- 快速失败比无限等待更好
+- 超时后继续处理下一只股票，提升用户体验
+
+---
+
+## 29. 数据复权类型选择
+
+### 问题
+```python
+# 用户反馈：招商银行显示价格为 222 元，实际价格约 49 元
+# 原因：使用前复权价格（adjust="hfq"）
+# 前复权价格会根据分红拆股等调整，导致当前价格与实际市场价格不符
+```
+
+### 原因
+- 前复权（hfq）价格会根据历史分红、拆股等进行调整
+- 当前日期的价格与前复权价格差异很大
+- 用户期望看到真实的市场价格
+- 用户体验差，不直观
+
+### 解决方案
+```python
+# 修改为不复权价格
+# akshare
+df = ak.stock_zh_a_hist(
+    symbol=symbol,
+    adjust=""  # 不复权（原来是 "hfq"）
+)
+
+# baostock
+rs = bs.query_history_k_data_plus(
+    bs_symbol,
+    ...,
+    adjustflag="3"  # 不复权（原来是 "1"）
+)
+```
+
+### 对比分析
+
+| 复权类型 | 用途 | 显示价格 | 适用场景 |
+|---------|------|---------|---------|
+| 不复权 | 实际价格 | 真实市场价格 | 日常查看、买卖决策 |
+| 前复权 | 趋势分析 | 调整后价格 | 技术分析、趋势判断 |
+| 后复权 | 收益分析 | 调整后价格 | 收益率计算 |
+
+### 经验教训
+- 用户界面显示应该使用实际市场价格（不复权）
+- 前复权/后复权仅用于技术分析和收益计算
+- 数据存储使用不复权价格，避免混淆
+- 更改复权类型后需要清空历史数据重新获取
+- 股票有分红拆股历史时，复权价格差异很大
+
+---
+
+## 30. 长期预测模型数据需求
+
+### 问题
+```python
+# 长期预测训练失败：No training data available
+# 错误原因：数据不足（需要至少372天，当前只有312天）
+# 长期预测：lookback=252天 + horizon=120天 = 372天
+```
+
+### 原因
+- 数据起始日期设置过近（2025-01-01）
+- 长期预测需要更多历史数据
+- 没有提前验证数据量是否足够
+- 模型参数设置与数据量不匹配
+
+### 解决方案
+```python
+# 修改数据起始日期为更早日期
+# config/data_config.json
+{
+  "data": {
+    "start_date": "2015-01-01",  // 11年历史数据
+    "start_date_description": "11年历史数据，用于长期预测（需要至少372天）"
+  }
+}
+
+# 训练前验证数据量
+def prepare_training_data(symbol, horizon, lookback):
+    data = storage.get_stock_data(symbol)
+    min_required = lookback + horizon
+
+    if len(data) < min_required:
+        Logger.warning(f"Insufficient data for {symbol}: {len(data)} < {min_required}")
+        return None, None
+
+    return features, labels
+```
+
+### 数据需求分析
+
+| 预测类型 | 回望期 | 预测期 | 最小天数 | 建议天数 |
+|---------|--------|--------|---------|---------|
+| 短期 | 20天 | 5天 | 25天 | 100天 |
+| 中期 | 120天 | 60天 | 180天 | 365天 |
+| 长期 | 252天 | 120天 | 372天 | 730天 |
+
+### 经验教训
+- 长期预测需要更长的历史数据
+- 训练前验证数据量是否足够
+- 数据起始日期应考虑最长的预测需求
+- 可以根据实际数据量动态调整模型参数
+- 清空数据重新获取前评估数据量
+
+---
+
+# 总结更新
+
+## 新增最佳实践（2026-04）
+
+### 数据获取
+1. 使用串行处理避免 API 速率限制
+2. 每个请求之间添加适当延迟
+3. 准备备用数据源（如 baostock）
+4. 实现增量更新，只获取缺失数据
+5. 自动检测和转换中文列名
+6. **外部 API 请求必须设置超时控制**
+7. **使用 threading 实现阻塞操作超时**
+
+### 数据管理
+1. 批量数据更新使用独立脚本工具
+2. 避免数据冗余（如股票名称不在多个表中存储）
+3. 使用 LEFT JOIN 保证数据完整性
+4. 添加占位符处理边界情况
+5. **界面显示使用不复权价格（实际市场价格）**
+6. **数据起始日期应考虑最长的预测需求**

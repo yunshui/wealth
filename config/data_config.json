@@ -1,7 +1,7 @@
 {
   "data": {
-    "start_date": "2025-01-01",
-    "start_date_description": "默认1年历史数据，可根据需要修改为更长时间（如2018-01-01为7年）",
+    "start_date": "2015-01-01",
+    "start_date_description": "11年历史数据，用于长期预测（需要至少372天）",
     "update_cache_hours": 4
   }
 }

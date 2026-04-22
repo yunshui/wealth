@@ -74,7 +74,7 @@ ak.stock_individual_info_em(symbol="股票代码")
 - 获取A股历史行情数据
 - 作为 akshare 的备用数据源
 - 支持 k 线数据查询
-- 数据前复权处理
+- 支持不复权数据处理
 
 **常用API**：
 ```python
@@ -87,10 +87,10 @@ bs.login()
 rs = bs.query_history_k_data_plus(
     "sh.600000",  # 股票代码
     "date,code,open,high,low,close,volume,amount",
-    start_date="2018-01-01",
-    end_date="2023-12-31",
+    start_date="2015-01-01",
+    end_date="2026-12-31",
     frequency="d",  # 日线
-    adjustflag="1"  # 前复权
+    adjustflag="3"  # 不复权 (1: 前复权, 3: 不复权)
 )
 
 # 登出系统

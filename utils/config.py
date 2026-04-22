@@ -9,13 +9,13 @@ class Config:
     """Application configuration."""
 
     # Version
-    VERSION = "0.5.42"
+    VERSION = "0.5.46"
 
     # Database
     DB_PATH = 'data/stock_data.db'
 
     # Data
-    DEFAULT_DATA_START_DATE = '2025-01-01'  # Default 1 year of historical data
+    DEFAULT_DATA_START_DATE = '2015-01-01'  # Default 11 years of historical data
     DATA_UPDATE_TIME = '15:30'  # Update after market close
 
     # Sectors
