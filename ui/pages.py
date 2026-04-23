@@ -1375,8 +1375,10 @@ def _train_models(storage: StockStorage):
                 )
             else:
                 accuracy = metrics.get('accuracy', 0)
-                samples = metrics.get('samples', 0)
-                st.success(f"✅ {name} 训练完成! 准确率: {accuracy*100:.1f}%, 样本数: {samples}")
+                train_samples = metrics.get('train_samples', 0)
+                test_samples = metrics.get('test_samples', 0)
+                total_samples = train_samples + test_samples
+                st.success(f"✅ {name} 训练完成! 准确率: {accuracy*100:.1f}%, 样本数: {total_samples}")
 
         except Exception as e:
             st.error(f"❌ {name} 训练失败: {str(e)}")
@@ -1386,9 +1388,11 @@ def _train_models(storage: StockStorage):
     model_info = {}
     for horizon, name in model_names.items():
         if horizon in results and 'error' not in results[horizon]:
+            train_samples = results[horizon].get('train_samples', 0)
+            test_samples = results[horizon].get('test_samples', 0)
             model_info[name] = {
                 'accuracy': results[horizon].get('accuracy', 0),
-                'samples': results[horizon].get('samples', 0),
+                'samples': train_samples + test_samples,
                 'train_date': datetime.now().strftime('%Y-%m-%d %H:%M:%S')
             }
 
