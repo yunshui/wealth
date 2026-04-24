@@ -134,12 +134,18 @@ def update_sector_stocks(storage: StockStorage, sector_id: str, full_update: boo
 
             Logger.info(f"update_sector_stocks: Processing {idx+1}/{total}: {symbol} - {name}")
 
-            # Update status
-            status_placeholder.info(f"正在更新 {idx+1}/{total}: {symbol} - {name}")
+            # Update status - use markdown with more prominent display
+            status_placeholder.markdown(f"""
+            **🔄 正在更新股票数据**
 
-            # Force UI update by using spinner and short delay
-            import time
-            time.sleep(0.1)  # Give Streamlit time to update UI
+            进度: {idx+1}/{total} ({(idx+1)/total*100:.1f}%)
+
+            当前处理: **{symbol}** - {name}
+            """)
+
+            # Update progress bar
+            progress = (idx + 1) / total
+            progress_bar.progress(progress)
 
             try:
                 # Check if stock info exists in stocks table
@@ -271,11 +277,11 @@ def update_sector_stocks(storage: StockStorage, sector_id: str, full_update: boo
             progress = (idx + 1) / total
             progress_bar.progress(progress)
 
-        # Clear displays
+        # Show result
+        # Clear progress displays
         progress_bar.empty()
         status_placeholder.empty()
 
-        # Show result
         if processed_count > 0:
             st.success(f"✅ 更新完成! 成功 {processed_count} 只, 失败 {failed_count} 只")
         else:
