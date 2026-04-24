@@ -349,46 +349,58 @@ with content_col:
             storage = StockStorage(db_manager)
             sector_id = sector.get('sector_id', '')
 
-            # Add full update checkbox first
-            full_update = st.checkbox("全量更新（从配置起始日期重新获取）", key="full_update_sector", value=False,
-                                    help="勾选后将从配置的起始日期（2015-01-01）重新获取全部历史数据，不勾选则只获取缺失的数据")
+            # Create a container for update progress that appears BEFORE other content
+            with st.container():
+                # Add full update checkbox first
+                full_update = st.checkbox("全量更新（从配置起始日期重新获取）", key="full_update_sector", value=False,
+                                                help="勾选后将从配置的起始日期（2015-01-01）重新获取全部历史数据，不勾选则只获取缺失的数据")
 
-            # Header with update button
-            col_left, col_right = st.columns([4, 1])
-            with col_left:
-                st.markdown(f"<p style='color: #000000;'><strong>当前板块:</strong> {sector['sector_name']}</p>", unsafe_allow_html=True)
-            with col_right:
-                # Save full_update value to session state before rerun
-                if st.button("🔄 更新数据", key="update_sector_stocks"):
-                    st.session_state.update_sector_requested = True
-                    st.session_state.full_update_requested = full_update
-                    st.rerun()
+                # Header with update button
+                col_left, col_right = st.columns([4, 1])
+                with col_left:
+                    st.markdown(f"<p style='color: #000000;'><strong>当前板块:</strong> {sector['sector_name']}</p>", unsafe_allow_html=True)
+                with col_right:
+                    # Save full_update value to session state before rerun
+                    if st.button("🔄 更新数据", key="update_sector_stocks"):
+                        st.session_state.update_sector_requested = True
+                        st.session_state.full_update_requested = full_update
+                        st.rerun()
 
-            # Handle update request
-            if st.session_state.get('update_sector_requested', False):
-                # Create progress displays
-                progress_bar = st.progress(0)
-                status_placeholder = st.empty()
+                # Handle update request - create placeholders immediately
+                if st.session_state.get('update_sector_requested', False):
+                    # Create progress displays with a divider for visibility
+                    st.markdown("---")
+                    st.markdown("### 📥 正在更新板块股票数据")
 
-                # Get the full_update flag from session state
-                full_update = st.session_state.get('full_update_requested', False)
-                st.session_state.update_sector_requested = False
-                st.session_state.full_update_requested = False
+                    progress_bar = st.progress(0)
+                    status_placeholder = st.empty()
 
-                # Call update function
-                result = update_sector_stocks(storage, sector_id, full_update=full_update,
-                                               progress_bar=progress_bar, status_placeholder=status_placeholder)
+                    # Get the full_update flag from session state
+                    full_update = st.session_state.get('full_update_requested', False)
+                    st.session_state.update_sector_requested = False
+                    st.session_state.full_update_requested = False
 
-                # Clear placeholders after update
-                progress_bar.empty()
-                status_placeholder.empty()
+                    # Force Streamlit to render before long-running operation
+                    st.markdown('')  # Force a render
 
-                if result:
-                    st.success("✅ 板块股票数据已更新，页面将刷新...")
-                    time.sleep(1)
-                    st.rerun()
+                    # Call update function
+                    result = update_sector_stocks(storage, sector_id, full_update=full_update,
+                                                   progress_bar=progress_bar, status_placeholder=status_placeholder)
 
-            # Get sector leaders
+                    # Clear placeholders after update
+                    progress_bar.empty()
+                    status_placeholder.empty()
+                    st.markdown("---")
+
+                    if result:
+                        st.success("✅ 板块股票数据已更新，页面将刷新...")
+                        time.sleep(1)
+                        st.rerun()
+
+                    # Stop rendering after update is complete
+                    st.stop()
+
+            # Get sector leaders (this will be hidden during update)
             leaders = storage.get_sector_leaders(sector_id)
 
             # Display message if no leaders
