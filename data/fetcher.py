@@ -354,8 +354,20 @@ class DataFetcher:
         thread.daemon = True
         thread.start()
 
-        # Wait for completion with 1 minute timeout
-        timeout_seconds = 60  # 1 minute
+        # Wait for completion with timeout
+        # Calculate date range for timeout adjustment
+        timeout_seconds = 60  # Default 1 minute
+        if start_date and end_date:
+            try:
+                from datetime import datetime
+                start_dt = datetime.strptime(start_date, '%Y%m%d')
+                end_dt = datetime.strptime(end_date, '%Y%m%d')
+                days_range = (end_dt - start_dt).days
+                # Use longer timeout for large date ranges (more than 1 year)
+                if days_range > 365:
+                    timeout_seconds = 300  # 5 minutes
+            except:
+                pass
         thread.join(timeout=timeout_seconds)
 
         if thread.is_alive():

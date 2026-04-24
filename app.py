@@ -137,6 +137,10 @@ def update_sector_stocks(storage: StockStorage, sector_id: str, full_update: boo
             # Update status
             status_placeholder.info(f"正在更新 {idx+1}/{total}: {symbol} - {name}")
 
+            # Force UI update by using spinner and short delay
+            import time
+            time.sleep(0.1)  # Give Streamlit time to update UI
+
             try:
                 # Check if stock info exists in stocks table
                 stock_info = storage.get_stock(symbol)
@@ -245,17 +249,23 @@ def update_sector_stocks(storage: StockStorage, sector_id: str, full_update: boo
                     # Fetch and save data
                     history_df = fetcher.get_stock_history(symbol, start_date, end_date)
                     if history_df is not None and not history_df.empty:
+                        Logger.info(f"{symbol}: Fetched {len(history_df)} records")
                         history_df = calculator.calculate_all(history_df)
                         storage.save_stock_data_incremental(history_df)
                         processed_count += 1
+                        Logger.info(f"{symbol}: Successfully saved data")
                     else:
                         failed_count += 1
+                        Logger.warning(f"{symbol}: Failed to fetch data (history_df is {type(history_df)}, empty={history_df.empty if history_df is not None else 'N/A'})")
                 else:
                     processed_count += 1  # Today's data exists
+                    Logger.info(f"{symbol}: Skipped (today's data exists)")
 
             except Exception as e:
                 failed_count += 1
-                Logger.warning(f"Failed to update {symbol}: {str(e)}")
+                Logger.error(f"Failed to update {symbol}: {str(e)}")
+                import traceback
+                Logger.error(f"Traceback: {traceback.format_exc()}")
 
             # Update progress
             progress = (idx + 1) / total
