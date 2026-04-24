@@ -229,6 +229,15 @@ class DataFetcher:
                     df = df.rename(columns=COLUMN_MAPPING)
                     Logger.debug(f"Converted Chinese column names to English for {symbol}")
 
+                # Ensure symbol format is consistent with .SH/.SZ suffix
+                if 'symbol' in df.columns:
+                    # If symbol doesn't have suffix, add based on first digit
+                    df['symbol'] = df['symbol'].apply(
+                        lambda x: x + '.SH' if str(x).startswith('6') else x + '.SZ'
+                        if '.' not in str(x) else str(x)
+                    )
+                    Logger.debug(f"Unified symbol format for {symbol}")
+
             return df
         except Exception as e:
             Logger.warning(f"akshare API failed for stock history: {str(e)}")
