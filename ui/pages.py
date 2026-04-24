@@ -645,9 +645,12 @@ def show_data_update():
                 _update_sectors_data(storage)
 
         with col2:
+            # Add full update checkbox
+            full_update = st.checkbox("全量更新（从配置起始日期重新获取）", key="full_update_stocks", value=False,
+                                    help="勾选后将从配置的起始日期（2015-01-01）重新获取全部历史数据，不勾选则只获取缺失的数据")
             if st.button("🔄 更新股票数据", use_container_width=True, key="update_stocks"):
                 Logger.info("========== BUTTON CLICKED: update_stocks ==========")
-                _update_stocks_data(storage)
+                _update_stocks_data(storage, full_update=full_update)
 
         with col3:
             if st.button("🔄 更新技术指标", use_container_width=True, key="update_indicators"):
@@ -830,17 +833,18 @@ def _update_sectors_data(storage: StockStorage):
         st.error(f"更新失败: {str(e)}")
 
 
-def _update_stocks_data(storage: StockStorage):
+def _update_stocks_data(storage: StockStorage, full_update: bool = False):
     """Update stock data for all sectors using parallel processing from database.
 
     Args:
         storage: StockStorage instance for data operations
+        full_update: If True, fetch all data from config start date; otherwise incremental
     """
     from data.fetcher import DataFetcher
     from analysis.indicators import IndicatorCalculator
 
     Logger.info("========== _update_stocks_data: START ==========")
-    Logger.info("_update_stocks_data: Starting stock data update")
+    Logger.info(f"_update_stocks_data: Starting stock data update (full_update={full_update})")
 
     # Create progress displays
     progress_bar = st.progress(0)
@@ -982,16 +986,25 @@ def _update_stocks_data(storage: StockStorage):
 
                         if needs_update:
                             # Get the latest date in database for incremental update
-                            latest_date = thread_storage.get_stock_latest_date(symbol)
-                            if latest_date:
-                                # Convert YYYY-MM-DD to YYYYMMDD and add 1 day
-                                from datetime import timedelta
-                                latest_dt = datetime.strptime(latest_date, '%Y-%m-%d')
-                                next_date = (latest_dt + timedelta(days=1)).strftime('%Y%m%d')
-                                stock_start_date = next_date
-                            else:
-                                # No data exists, start from config start date
+                            # If full_update is True, always use config start date
+                            if full_update:
+                                # Full update: always start from config start date
                                 stock_start_date = start_date
+                                Logger.info(f"{symbol}: Full update, starting from {stock_start_date}")
+                            else:
+                                # Incremental update: start from latest date + 1
+                                latest_date = thread_storage.get_stock_latest_date(symbol)
+                                if latest_date:
+                                    # Convert YYYY-MM-DD to YYYYMMDD and add 1 day
+                                    from datetime import timedelta
+                                    latest_dt = datetime.strptime(latest_date, '%Y-%m-%d')
+                                    next_date = (latest_dt + timedelta(days=1)).strftime('%Y%m%d')
+                                    stock_start_date = next_date
+                                    Logger.info(f"{symbol}: Incremental update, starting from {stock_start_date}")
+                                else:
+                                    # No data exists, start from config start date
+                                    stock_start_date = start_date
+                                    Logger.info(f"{symbol}: No data, starting from {stock_start_date}")
 
                             history_df = thread_fetcher.get_stock_history(symbol, stock_start_date, end_date)
                             if history_df is not None and not history_df.empty:

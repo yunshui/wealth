@@ -84,12 +84,13 @@ def get_stock_latest_data(storage: StockStorage, symbol: str) -> dict:
     return {}
 
 
-def update_sector_stocks(storage: StockStorage, sector_id: str):
+def update_sector_stocks(storage: StockStorage, sector_id: str, full_update: bool = False):
     """Update stock data for the current sector.
 
     Args:
         storage: StockStorage instance
         sector_id: Sector ID
+        full_update: If True, fetch all data from config start date; otherwise incremental
 
     Returns:
         True if update was successful, False otherwise
@@ -215,14 +216,23 @@ def update_sector_stocks(storage: StockStorage, sector_id: str):
 
                 if needs_update:
                     # Get latest date for incremental update
-                    latest_date = storage.get_stock_latest_date(symbol)
-                    if latest_date:
-                        latest_dt = datetime.strptime(latest_date, '%Y-%m-%d')
-                        next_date = (latest_dt + timedelta(days=1)).strftime('%Y%m%d')
-                        start_date = next_date
-                    else:
-                        # No data exists, use config start date
+                    # If full_update is True, always use config start date
+                    if full_update:
+                        # Full update: always start from config start date
                         start_date = Config.get_data_start_date().replace('-', '')
+                        Logger.info(f"{symbol}: Full update, starting from {start_date}")
+                    else:
+                        # Incremental update: start from latest date + 1
+                        latest_date = storage.get_stock_latest_date(symbol)
+                        if latest_date:
+                            latest_dt = datetime.strptime(latest_date, '%Y-%m-%d')
+                            next_date = (latest_dt + timedelta(days=1)).strftime('%Y%m%d')
+                            start_date = next_date
+                            Logger.info(f"{symbol}: Incremental update, starting from {start_date}")
+                        else:
+                            # No data exists, use config start date
+                            start_date = Config.get_data_start_date().replace('-', '')
+                            Logger.info(f"{symbol}: No data, starting from {start_date}")
 
                     # Fetch and save data
                     history_df = fetcher.get_stock_history(symbol, start_date, end_date)
@@ -313,12 +323,16 @@ with content_col:
                     st.session_state.update_sector_requested = True
                     st.rerun()
 
+            # Add full update checkbox below the button
+            full_update = st.checkbox("全量更新（从配置起始日期重新获取）", key="full_update_sector", value=False,
+                                    help="勾选后将从配置的起始日期（2015-01-01）重新获取全部历史数据，不勾选则只获取缺失的数据")
+
             # Handle update request
             if st.session_state.update_sector_requested:
                 st.session_state.update_sector_requested = False
                 st.markdown("---")
                 st.markdown("### 📥 更新板块股票数据")
-                update_sector_stocks(storage, sector_id)
+                update_sector_stocks(storage, sector_id, full_update=full_update)
                 st.markdown("---")
 
                 # After update completes, the data is already saved to database
