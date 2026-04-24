@@ -84,13 +84,16 @@ def get_stock_latest_data(storage: StockStorage, symbol: str) -> dict:
     return {}
 
 
-def update_sector_stocks(storage: StockStorage, sector_id: str, full_update: bool = False):
+def update_sector_stocks(storage: StockStorage, sector_id: str, full_update: bool = False,
+                          progress_bar=None, status_placeholder=None):
     """Update stock data for the current sector.
 
     Args:
         storage: StockStorage instance
         sector_id: Sector ID
         full_update: If True, fetch all data from config start date; otherwise incremental
+        progress_bar: Streamlit progress bar element
+        status_placeholder: Streamlit status placeholder element
 
     Returns:
         True if update was successful, False otherwise
@@ -117,9 +120,11 @@ def update_sector_stocks(storage: StockStorage, sector_id: str, full_update: boo
         end_date = datetime.now().strftime('%Y%m%d')
         cache_hours = Config.get_update_cache_hours()
 
-        # Create progress displays
-        progress_bar = st.progress(0)
-        status_placeholder = st.empty()
+        # Create progress displays if not provided
+        if progress_bar is None:
+            progress_bar = st.progress(0)
+        if status_placeholder is None:
+            status_placeholder = st.empty()
 
         processed_count = 0
         failed_count = 0
@@ -278,14 +283,18 @@ def update_sector_stocks(storage: StockStorage, sector_id: str, full_update: boo
             progress_bar.progress(progress)
 
         # Show result
-        # Clear progress displays
-        progress_bar.empty()
-        status_placeholder.empty()
+        # Only clear progress displays if they were created inside this function
+        if progress_bar is None:
+            progress_bar.empty()
+        if status_placeholder is None:
+            status_placeholder.empty()
 
-        if processed_count > 0:
-            st.success(f"✅ 更新完成! 成功 {processed_count} 只, 失败 {failed_count} 只")
-        else:
-            st.warning(f"⚠️ 更新完成! 成功 {processed_count} 只, 失败 {failed_count} 只")
+        # Only show result if placeholders were created inside this function
+        if progress_bar is None and status_placeholder is None:
+            if processed_count > 0:
+                st.success(f"✅ 更新完成! 成功 {processed_count} 只, 失败 {failed_count} 只")
+            else:
+                st.warning(f"⚠️ 更新完成! 成功 {processed_count} 只, 失败 {failed_count} 只")
 
         Logger.info(f"update_sector_stocks: Completed - processed: {processed_count}, failed: {failed_count}")
         return True
@@ -349,6 +358,7 @@ with content_col:
             with col_left:
                 st.markdown(f"<p style='color: #000000;'><strong>当前板块:</strong> {sector['sector_name']}</p>", unsafe_allow_html=True)
             with col_right:
+                # Save full_update value to session state before rerun
                 if st.button("🔄 更新数据", key="update_sector_stocks"):
                     st.session_state.update_sector_requested = True
                     st.session_state.full_update_requested = full_update
@@ -356,18 +366,27 @@ with content_col:
 
             # Handle update request
             if st.session_state.get('update_sector_requested', False):
+                # Create progress displays
+                progress_bar = st.progress(0)
+                status_placeholder = st.empty()
+
                 # Get the full_update flag from session state
                 full_update = st.session_state.get('full_update_requested', False)
                 st.session_state.update_sector_requested = False
                 st.session_state.full_update_requested = False
 
-                st.markdown("---")
-                st.markdown("### 📥 更新板块股票数据")
-                update_sector_stocks(storage, sector_id, full_update=full_update)
-                st.markdown("---")
+                # Call update function
+                result = update_sector_stocks(storage, sector_id, full_update=full_update,
+                                               progress_bar=progress_bar, status_placeholder=status_placeholder)
 
-                # After update completes, the data is already saved to database
-                # Continue to display the updated data below
+                # Clear placeholders after update
+                progress_bar.empty()
+                status_placeholder.empty()
+
+                if result:
+                    st.success("✅ 板块股票数据已更新，页面将刷新...")
+                    time.sleep(1)
+                    st.rerun()
 
             # Get sector leaders
             leaders = storage.get_sector_leaders(sector_id)
