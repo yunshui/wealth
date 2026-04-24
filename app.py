@@ -419,94 +419,94 @@ with content_col:
                     st.markdown("<h3 style='color: #000000;'>龙头股 Top 5</h3>", unsafe_allow_html=True)
 
                     for i, leader in enumerate(leaders[:5], 1):
-                    symbol = leader.get('symbol', '')
-                    name = leader.get('name', get_stock_name(storage, symbol))
-                    score = leader.get('score', 0)
-                    rank = leader.get('rank', 0)
+                        symbol = leader.get('symbol', '')
+                        name = leader.get('name', get_stock_name(storage, symbol))
+                        score = leader.get('score', 0)
+                        rank = leader.get('rank', 0)
 
-                    # Get latest data from database
-                    stock_data = get_stock_latest_data(storage, symbol)
+                        # Get latest data from database
+                        stock_data = get_stock_latest_data(storage, symbol)
 
-                    # Create expandable card for each stock
-                    with st.expander(f"{i}. {symbol} - {name} - 得分: {score:.2f} (排名: {rank})", expanded=True):
-                        if stock_data:
-                            # Use database data
-                            close_price = float(stock_data.get('close', 0))
-                            open_price = float(stock_data.get('open', 0))
-                            high_price = float(stock_data.get('high', 0))
-                            low_price = float(stock_data.get('low', 0))
-                            prev_close = float(stock_data.get('pre_close', 0))
-                            volume = float(stock_data.get('vol', 0))
+                        # Create expandable card for each stock
+                        with st.expander(f"{i}. {symbol} - {name} - 得分: {score:.2f} (排名: {rank})", expanded=True):
+                            if stock_data:
+                                # Use database data
+                                close_price = float(stock_data.get('close', 0))
+                                open_price = float(stock_data.get('open', 0))
+                                high_price = float(stock_data.get('high', 0))
+                                low_price = float(stock_data.get('low', 0))
+                                prev_close = float(stock_data.get('pre_close', 0))
+                                volume = float(stock_data.get('vol', 0))
 
-                            # Calculate change percentage
-                            if prev_close and prev_close > 0:
-                                change_pct = (close_price - prev_close) / prev_close * 100
+                                # Calculate change percentage
+                                if prev_close and prev_close > 0:
+                                    change_pct = (close_price - prev_close) / prev_close * 100
+                                else:
+                                    change_pct = 0
+
+                                col1, col2, col3, col4 = st.columns(4)
+
+                                with col1:
+                                    st.metric("最新价", f"{close_price:.2f}")
+
+                                with col2:
+                                    # Use delta_color for Chinese stock market convention (red = up)
+                                    delta_color = "normal" if change_pct > 0 else ("inverse" if change_pct < 0 else "off")
+                                    st.metric("涨跌幅", f"{change_pct:+.2f}%", delta=None, delta_color=delta_color)
+
+                                with col3:
+                                    st.metric("开盘价", f"{open_price:.2f}")
+
+                                with col4:
+                                    data_date = stock_data.get('trade_date', '')
+                                    if data_date:
+                                        st.caption(f"数据日期: {data_date}")
+                                    else:
+                                        st.caption("数据日期: 未知")
+
+                                # Additional price analysis
+                                st.markdown("**价位分析**")
+                                price_col1, price_col2, price_col3 = st.columns(3)
+
+                                with price_col1:
+                                    st.metric("最高价", f"{high_price:.2f}")
+
+                                with price_col2:
+                                    st.metric("最低价", f"{low_price:.2f}")
+
+                                with price_col3:
+                                    if volume > 100000000:
+                                        vol_display = f"{volume/100000000:.2f}亿"
+                                    elif volume > 10000:
+                                        vol_display = f"{volume/10000:.2f}万"
+                                    else:
+                                        vol_display = f"{volume}"
+                                    st.metric("成交量", vol_display)
+
+                                # Amplitude analysis
+                                if low_price > 0:
+                                    amplitude = (high_price - low_price) / low_price * 100
+                                    st.markdown(f"**振幅**: {amplitude:+.2f}%")
+
+                                # Add button to view stock detail with prediction
+                                if st.button(f"📊 查看 {symbol} 详情和预测", key=f"view_detail_{symbol}"):
+                                    st.session_state.selected_symbol = symbol
+                                    st.session_state.nav_module = "stock_detail"
+                                    st.rerun()
                             else:
-                                change_pct = 0
+                                # Show no data indicator
+                                st.caption("暂无数据，请在「数据更新」页面更新股票数据")
 
-                            col1, col2, col3, col4 = st.columns(4)
+                                # Add button to view stock detail (even without data)
+                                if st.button(f"📊 查看 {symbol} 详情和预测", key=f"view_detail_no_data_{symbol}"):
+                                    st.session_state.selected_symbol = symbol
+                                    st.session_state.nav_module = "stock_detail"
+                                    st.rerun()
 
-                            with col1:
-                                st.metric("最新价", f"{close_price:.2f}")
-
-                            with col2:
-                                # Use delta_color for Chinese stock market convention (red = up)
-                                delta_color = "normal" if change_pct > 0 else ("inverse" if change_pct < 0 else "off")
-                                st.metric("涨跌幅", f"{change_pct:+.2f}%", delta=None, delta_color=delta_color)
-
-                            with col3:
-                                st.metric("开盘价", f"{open_price:.2f}")
-
-                            with col4:
-                                data_date = stock_data.get('trade_date', '')
-                                if data_date:
-                                    st.caption(f"数据日期: {data_date}")
-                                else:
-                                    st.caption("数据日期: 未知")
-
-                            # Additional price analysis
-                            st.markdown("**价位分析**")
-                            price_col1, price_col2, price_col3 = st.columns(3)
-
-                            with price_col1:
-                                st.metric("最高价", f"{high_price:.2f}")
-
-                            with price_col2:
-                                st.metric("最低价", f"{low_price:.2f}")
-
-                            with price_col3:
-                                if volume > 100000000:
-                                    vol_display = f"{volume/100000000:.2f}亿"
-                                elif volume > 10000:
-                                    vol_display = f"{volume/10000:.2f}万"
-                                else:
-                                    vol_display = f"{volume}"
-                                st.metric("成交量", vol_display)
-
-                            # Amplitude analysis
-                            if low_price > 0:
-                                amplitude = (high_price - low_price) / low_price * 100
-                                st.markdown(f"**振幅**: {amplitude:+.2f}%")
-
-                            # Add button to view stock detail with prediction
-                            if st.button(f"📊 查看 {symbol} 详情和预测", key=f"view_detail_{symbol}"):
-                                st.session_state.selected_symbol = symbol
-                                st.session_state.nav_module = "stock_detail"
-                                st.rerun()
-                        else:
-                            # Show no data indicator
-                            st.caption("暂无数据，请在「数据更新」页面更新股票数据")
-
-                            # Add button to view stock detail (even without data)
-                            if st.button(f"📊 查看 {symbol} 详情和预测", key=f"view_detail_no_data_{symbol}"):
-                                st.session_state.selected_symbol = symbol
-                                st.session_state.nav_module = "stock_detail"
-                                st.rerun()
-
-            if st.button("← 返回板块列表"):
-                st.session_state.selected_sector = None
-                st.session_state.nav_module = "home"
-                st.rerun()
+                    if st.button("← 返回板块列表"):
+                        st.session_state.selected_sector = None
+                        st.session_state.nav_module = "home"
+                        st.rerun()
 
             footer_right()
         else:
