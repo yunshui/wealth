@@ -99,6 +99,10 @@ def update_sector_stocks(storage: StockStorage, sector_id: str, full_update: boo
     from analysis.indicators import IndicatorCalculator
     from datetime import timedelta
     from utils.config import Config
+    from utils.logger import Logger
+
+    Logger.info(f"========== update_sector_stocks: START ==========")
+    Logger.info(f"update_sector_stocks: sector_id={sector_id}, full_update={full_update}")
 
     try:
         # Get sector leaders
@@ -106,6 +110,8 @@ def update_sector_stocks(storage: StockStorage, sector_id: str, full_update: boo
         if not leaders:
             st.warning("该板块暂无龙头股")
             return False
+
+        Logger.info(f"update_sector_stocks: Found {len(leaders)} leaders in sector {sector_id}")
 
         # Calculate date range
         end_date = datetime.now().strftime('%Y%m%d')
@@ -125,6 +131,8 @@ def update_sector_stocks(storage: StockStorage, sector_id: str, full_update: boo
         for idx, leader in enumerate(leaders):
             symbol = leader.get('symbol', '')
             name = leader.get('name', symbol)
+
+            Logger.info(f"update_sector_stocks: Processing {idx+1}/{total}: {symbol} - {name}")
 
             # Update status
             status_placeholder.info(f"正在更新 {idx+1}/{total}: {symbol} - {name}")
@@ -263,9 +271,11 @@ def update_sector_stocks(storage: StockStorage, sector_id: str, full_update: boo
         else:
             st.warning(f"⚠️ 更新完成! 成功 {processed_count} 只, 失败 {failed_count} 只")
 
+        Logger.info(f"update_sector_stocks: Completed - processed: {processed_count}, failed: {failed_count}")
         return True
 
     except Exception as e:
+        Logger.error(f"update_sector_stocks: Exception: {str(e)}")
         Logger.error(f"Failed to update sector stocks: {str(e)}")
         st.error(f"更新失败: {str(e)}")
         return False
@@ -314,6 +324,10 @@ with content_col:
             storage = StockStorage(db_manager)
             sector_id = sector.get('sector_id', '')
 
+            # Add full update checkbox first
+            full_update = st.checkbox("全量更新（从配置起始日期重新获取）", key="full_update_sector", value=False,
+                                    help="勾选后将从配置的起始日期（2015-01-01）重新获取全部历史数据，不勾选则只获取缺失的数据")
+
             # Header with update button
             col_left, col_right = st.columns([4, 1])
             with col_left:
@@ -321,15 +335,16 @@ with content_col:
             with col_right:
                 if st.button("🔄 更新数据", key="update_sector_stocks"):
                     st.session_state.update_sector_requested = True
+                    st.session_state.full_update_requested = full_update
                     st.rerun()
 
-            # Add full update checkbox below the button
-            full_update = st.checkbox("全量更新（从配置起始日期重新获取）", key="full_update_sector", value=False,
-                                    help="勾选后将从配置的起始日期（2015-01-01）重新获取全部历史数据，不勾选则只获取缺失的数据")
-
             # Handle update request
-            if st.session_state.update_sector_requested:
+            if st.session_state.get('update_sector_requested', False):
+                # Get the full_update flag from session state
+                full_update = st.session_state.get('full_update_requested', False)
                 st.session_state.update_sector_requested = False
+                st.session_state.full_update_requested = False
+
                 st.markdown("---")
                 st.markdown("### 📥 更新板块股票数据")
                 update_sector_stocks(storage, sector_id, full_update=full_update)
