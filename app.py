@@ -152,6 +152,9 @@ def update_sector_stocks(storage: StockStorage, sector_id: str, full_update: boo
             progress = (idx + 1) / total
             progress_bar.progress(progress)
 
+            # Force Streamlit to render the updated progress
+            time.sleep(0.2)
+
             try:
                 # Check if stock info exists in stocks table
                 stock_info = storage.get_stock(symbol)
@@ -349,8 +352,42 @@ with content_col:
             storage = StockStorage(db_manager)
             sector_id = sector.get('sector_id', '')
 
-            # Create a container for update progress that appears BEFORE other content
-            with st.container():
+            # Check if update is in progress
+            if st.session_state.get('update_sector_in_progress', False):
+                # Show update progress only
+                st.markdown("---")
+                st.markdown("### 📥 正在更新板块股票数据")
+                st.info("💡 请稍候，正在获取股票数据...")
+
+                progress_bar = st.progress(0)
+                status_placeholder = st.empty()
+
+                full_update = st.session_state.get('full_update_requested', False)
+                st.session_state.update_sector_in_progress = False
+
+                # Force Streamlit to render
+                time.sleep(0.2)
+
+                # Call update function
+                result = update_sector_stocks(storage, sector_id, full_update=full_update,
+                                               progress_bar=progress_bar, status_placeholder=status_placeholder)
+
+                # Clear placeholders
+                progress_bar.empty()
+                status_placeholder.empty()
+
+                if result:
+                    st.success("✅ 板块股票数据已更新，页面将刷新...")
+                    time.sleep(1)
+                    st.rerun()
+                else:
+                    st.warning("⚠️ 更新失败，请稍后重试")
+                    time.sleep(1)
+                    st.rerun()
+
+                st.stop()
+            else:
+                # Show normal sector analysis page
                 # Add full update checkbox first
                 full_update = st.checkbox("全量更新（从配置起始日期重新获取）", key="full_update_sector", value=False,
                                                 help="勾选后将从配置的起始日期（2015-01-01）重新获取全部历史数据，不勾选则只获取缺失的数据")
@@ -362,60 +399,26 @@ with content_col:
                 with col_right:
                     # Save full_update value to session state before rerun
                     if st.button("🔄 更新数据", key="update_sector_stocks"):
-                        st.session_state.update_sector_requested = True
+                        st.session_state.update_sector_in_progress = True
                         st.session_state.full_update_requested = full_update
                         st.rerun()
 
-                # Handle update request - create placeholders immediately
-                if st.session_state.get('update_sector_requested', False):
-                    # Create progress displays with a divider for visibility
-                    st.markdown("---")
-                    st.markdown("### 📥 正在更新板块股票数据")
+                # Get sector leaders and display (only when not updating)
+                leaders = storage.get_sector_leaders(sector_id)
 
-                    progress_bar = st.progress(0)
-                    status_placeholder = st.empty()
+                # Display message if no leaders
+                if not leaders:
+                    st.warning(f"⚠️ 该板块暂无龙头股数据")
+                    st.info("💡 请先在「数据更新」页面点击「更新板块数据」获取龙头股")
+                else:
+                    st.markdown(f"<p style='color: #000000;'><strong>龙头股数量:</strong> {len(leaders)}</p>", unsafe_allow_html=True)
+                    avg_score = sum(l.get('score', 0) for l in leaders) / len(leaders)
+                    st.markdown(f"<p style='color: #000000;'><strong>平均得分:</strong> {avg_score:.2f}</p>", unsafe_allow_html=True)
 
-                    # Get the full_update flag from session state
-                    full_update = st.session_state.get('full_update_requested', False)
-                    st.session_state.update_sector_requested = False
-                    st.session_state.full_update_requested = False
+                    # Display top 5 leaders with price and analysis
+                    st.markdown("<h3 style='color: #000000;'>龙头股 Top 5</h3>", unsafe_allow_html=True)
 
-                    # Force Streamlit to render before long-running operation
-                    st.markdown('')  # Force a render
-
-                    # Call update function
-                    result = update_sector_stocks(storage, sector_id, full_update=full_update,
-                                                   progress_bar=progress_bar, status_placeholder=status_placeholder)
-
-                    # Clear placeholders after update
-                    progress_bar.empty()
-                    status_placeholder.empty()
-                    st.markdown("---")
-
-                    if result:
-                        st.success("✅ 板块股票数据已更新，页面将刷新...")
-                        time.sleep(1)
-                        st.rerun()
-
-                    # Stop rendering after update is complete
-                    st.stop()
-
-            # Get sector leaders (this will be hidden during update)
-            leaders = storage.get_sector_leaders(sector_id)
-
-            # Display message if no leaders
-            if not leaders:
-                st.warning(f"⚠️ 该板块暂无龙头股数据")
-                st.info("💡 请先在「数据更新」页面点击「更新板块数据」获取龙头股")
-            else:
-                st.markdown(f"<p style='color: #000000;'><strong>龙头股数量:</strong> {len(leaders)}</p>", unsafe_allow_html=True)
-                avg_score = sum(l.get('score', 0) for l in leaders) / len(leaders)
-                st.markdown(f"<p style='color: #000000;'><strong>平均得分:</strong> {avg_score:.2f}</p>", unsafe_allow_html=True)
-
-                # Display top 5 leaders with price and analysis
-                st.markdown("<h3 style='color: #000000;'>龙头股 Top 5</h3>", unsafe_allow_html=True)
-
-                for i, leader in enumerate(leaders[:5], 1):
+                    for i, leader in enumerate(leaders[:5], 1):
                     symbol = leader.get('symbol', '')
                     name = leader.get('name', get_stock_name(storage, symbol))
                     score = leader.get('score', 0)
