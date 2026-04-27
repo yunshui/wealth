@@ -229,6 +229,14 @@ class DataFetcher:
                     df = df.rename(columns=COLUMN_MAPPING)
                     Logger.debug(f"Converted Chinese column names to English for {symbol}")
 
+                # Ensure date format is YYYYMMDD (remove dashes if present)
+                if 'date' in df.columns:
+                    # Check if dates have dashes and convert to YYYYMMDD
+                    sample_date = str(df['date'].iloc[0])
+                    if '-' in sample_date:
+                        df['date'] = df['date'].str.replace('-', '')
+                        Logger.debug(f"Converted date format from YYYY-MM-DD to YYYYMMDD for {symbol}")
+
                 # Ensure symbol format is consistent with .SH/.SZ suffix
                 if 'symbol' in df.columns:
                     # If symbol doesn't have suffix, add based on first digit
