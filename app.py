@@ -380,14 +380,11 @@ with content_col:
                     st.success("✅ 板块股票数据已更新，页面将刷新...")
                     time.sleep(1)
                     # Use st.rerun() to refresh the page
-                    # Don't use st.stop() as it may interfere with st.rerun()
                     st.rerun()
-                    return  # Return instead of st.stop()
                 else:
                     st.warning("⚠️ 更新失败，请稍后重试")
                     time.sleep(1)
                     st.rerun()
-                    return  # Return instead of st.stop()
             else:
                 # Show normal sector analysis page
                 # Add full update checkbox first
