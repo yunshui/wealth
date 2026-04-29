@@ -231,8 +231,9 @@ class DataFetcher:
 
                 # Ensure date format is YYYYMMDD (remove dashes if present)
                 if 'date' in df.columns:
-                    # Check if dates have dashes and convert to YYYYMMDD
-                    sample_date = str(df['date'].iloc[0])
+                    # Convert to string first, then check if dates have dashes
+                    df['date'] = df['date'].astype(str)
+                    sample_date = df['date'].iloc[0]
                     if '-' in sample_date:
                         df['date'] = df['date'].str.replace('-', '')
                         Logger.debug(f"Converted date format from YYYY-MM-DD to YYYYMMDD for {symbol}")
