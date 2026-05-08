@@ -637,6 +637,9 @@ def show_data_update():
                     st.error(f"初始化失败: {e}")
             return
 
+        # Full update checkbox on a separate line
+        full_update = st.checkbox("全量更新", key="full_update_stocks", value=False, help="勾选后将从配置的起始日期重新获取全部历史数据，不勾选则只获取缺失的数据")
+
         # Update buttons
         col1, col2, col3, col4 = st.columns(4)
 
@@ -645,9 +648,6 @@ def show_data_update():
                 _update_sectors_data(storage)
 
         with col2:
-            # Add full update checkbox
-            full_update = st.checkbox("全量更新（从配置起始日期重新获取）", key="full_update_stocks", value=False,
-                                    help="勾选后将从配置的起始日期（2015-01-01）重新获取全部历史数据，不勾选则只获取缺失的数据")
             if st.button("🔄 更新股票数据", use_container_width=True, key="update_stocks"):
                 Logger.info("========== BUTTON CLICKED: update_stocks ==========")
                 _update_stocks_data(storage, full_update=full_update)

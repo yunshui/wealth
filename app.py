@@ -387,12 +387,13 @@ with content_col:
                     st.rerun()
             else:
                 # Show normal sector analysis page
-                # Add full update checkbox first
-                full_update = st.checkbox("全量更新（从配置起始日期重新获取）", key="full_update_sector", value=False,
-                                                help="勾选后将从配置的起始日期（2015-01-01）重新获取全部历史数据，不勾选则只获取缺失的数据")
 
-                # Header with update button
-                col_left, col_right = st.columns([4, 1])
+                # Header with update button and full update checkbox
+                # Define checkbox first so its value is available for the button
+                full_update = st.checkbox("全量更新", key="full_update_sector", value=False,
+                                        help="勾选后将从配置的起始日期重新获取全部历史数据，不勾选则只获取缺失的数据")
+
+                col_left, col_mid, col_right = st.columns([4, 2, 1])
                 with col_left:
                     st.markdown(f"<p style='color: #000000;'><strong>当前板块:</strong> {sector['sector_name']}</p>", unsafe_allow_html=True)
                 with col_right:
